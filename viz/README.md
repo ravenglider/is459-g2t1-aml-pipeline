@@ -1,2 +1,61 @@
-# viz
-Owner adds code and notes here.
+# viz: Tableau dashboards
+
+**Owner:** Roles 3 and 6 (name: ____________)
+
+Tableau dashboards for BQ1 (heatmap, ranked corridors) and BQ2 (Sankey, trade-off chart, targeted check list), connected to the final Athena tables.
+
+## What to commit here
+
+| File | Contents |
+|---|---|
+| `bq1_dashboard.twb` | BQ1 workbook (`.twb`, not `.twbx`) |
+| `bq2_dashboard.twb` | BQ2 workbook |
+| `screenshots/` | PNG of each dashboard for the slides |
+| `connection.md` | How to connect Tableau to Athena (driver, region, S3 staging directory, workgroup) |
+
+## Notes for this role
+
+- Commit `.twb` only: `.twbx` and `.hyper` embed data and are blocked by `.gitignore`.
+- Never save AWS keys inside the workbook or `connection.md`.
+- Keep colours and fonts consistent across both dashboards.
+
+---
+
+## README template (fill in as you build)
+
+### What it does
+
+_2 to 3 lines._
+
+### AWS resources
+
+| Resource | Exact name |
+|---|---|
+| | |
+
+### Inputs and outputs
+
+| | Table | S3 path |
+|---|---|---|
+| Reads | | |
+| Writes | | |
+
+### How to run
+
+1. 
+2. 
+
+### Step Functions info for Sonia
+
+| Field | Value |
+|---|---|
+| Job type | |
+| Exact name | |
+| Output table | |
+| Output S3 path | |
+| Depends on | |
+| Typical run time on full data | |
+
+### Contribution summary (for the Week 13 slide)
+
+_1 to 2 lines._
