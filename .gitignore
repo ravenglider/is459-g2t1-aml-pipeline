@@ -1,0 +1,19 @@
+# Secrets: never commit
+*.pem
+*.key
+.env
+kaggle.json
+.aws/
+credentials
+
+# Data: lives in S3, not GitHub
+*.csv
+*.parquet
+*.zip
+
+# OS and editor
+.DS_Store
+__pycache__/
+.ipynb_checkpoints/
+.vscode/
+.idea/

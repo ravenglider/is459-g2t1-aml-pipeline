@@ -1,0 +1,132 @@
+{
+  "Comment": "IS459 G2T1 AML pipeline: ingest external rates, crawl, ETL, BQ1 and BQ2 in parallel. Pass states are placeholders until teammates' jobs exist.",
+  "StartAt": "FetchRates",
+  "States": {
+    "FetchRates": {
+      "Type": "Task",
+      "Comment": "Role 1: Lambda pulls ECB FX and Coinbase BTC into s3://is459-g2t1-aml-bucket/fx and /btc",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "is459-g2t1-fetch-fxbtc-rates",
+        "Payload": {}
+      },
+      "ResultSelector": {
+        "rates.$": "$.Payload"
+      },
+      "ResultPath": "$.fetch",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.TooManyRequestsException",
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "StartRatesCrawler"
+    },
+    "StartRatesCrawler": {
+      "Type": "Task",
+      "Comment": "Role 1: refresh raw_fx and raw_btc tables",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Parameters": {
+        "Name": "is459-g2t1-fxbtc-rates-crawler"
+      },
+      "ResultPath": null,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "Glue.CrawlerRunningException"
+          ],
+          "ResultPath": null,
+          "Next": "WaitForRatesCrawler"
+        }
+      ],
+      "Next": "WaitForRatesCrawler"
+    },
+    "WaitForRatesCrawler": {
+      "Type": "Wait",
+      "Seconds": 20,
+      "Next": "GetRatesCrawlerState"
+    },
+    "GetRatesCrawlerState": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getCrawler",
+      "Parameters": {
+        "Name": "is459-g2t1-fxbtc-rates-crawler"
+      },
+      "ResultSelector": {
+        "state.$": "$.Crawler.State"
+      },
+      "ResultPath": "$.ratesCrawler",
+      "Next": "RatesCrawlerDone?"
+    },
+    "RatesCrawlerDone?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ratesCrawler.state",
+          "StringEquals": "READY",
+          "Next": "ETL_TransactionsClean"
+        }
+      ],
+      "Default": "WaitForRatesCrawler"
+    },
+    "ETL_TransactionsClean": {
+      "Type": "Pass",
+      "Comment": "Role 2 PLACEHOLDER. Replace with: Resource arn:aws:states:::glue:startJobRun.sync, Parameters { JobName: <role 2 glue job> }",
+      "Result": "placeholder: transactions_clean",
+      "ResultPath": "$.etl",
+      "Next": "Analytics"
+    },
+    "Analytics": {
+      "Type": "Parallel",
+      "Comment": "BQ1 and BQ2 run at the same time once transactions_clean exists",
+      "ResultPath": "$.analytics",
+      "Branches": [
+        {
+          "StartAt": "BQ1_Corridors",
+          "States": {
+            "BQ1_Corridors": {
+              "Type": "Pass",
+              "Comment": "Role 3 PLACEHOLDER. Glue job (glue:startJobRun.sync) or Athena query (athena:startQueryExecution.sync) building bq1_corridors",
+              "Result": "placeholder: bq1_corridors",
+              "Next": "BQ1_Neo4jLoad"
+            },
+            "BQ1_Neo4jLoad": {
+              "Type": "Pass",
+              "Comment": "Role 4 PLACEHOLDER. Likely aws-sdk:ssm:sendCommand to run the import script on the Neo4j EC2 instance",
+              "Result": "placeholder: neo4j graph loaded",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "BQ2_SequenceBuilder",
+          "States": {
+            "BQ2_SequenceBuilder": {
+              "Type": "Pass",
+              "Comment": "Role 5 PLACEHOLDER. Replace with glue:startJobRun.sync building bq2_sequences",
+              "Result": "placeholder: bq2_sequences",
+              "Next": "BQ2_LiftAnalysis"
+            },
+            "BQ2_LiftAnalysis": {
+              "Type": "Pass",
+              "Comment": "Role 6 PLACEHOLDER. Replace with athena:startQueryExecution.sync building bq2_lift",
+              "Result": "placeholder: bq2_lift",
+              "End": true
+            }
+          }
+        }
+      ],
+      "Next": "PipelineComplete"
+    },
+    "PipelineComplete": {
+      "Type": "Succeed",
+      "Comment": "Tableau reads the final Athena tables"
+    }
+  }
+}
