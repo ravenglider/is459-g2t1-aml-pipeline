@@ -3,7 +3,7 @@
 Big data pipeline on AWS using the IBM Transactions for Anti Money Laundering dataset (HI-Medium).
 
 - **BQ1:** Which pairs of banks are most involved in laundering, and which should prioritise information sharing?
-- **BQ2:** Which payment-method and currency sequences are most associated with laundering, and where should checks be targeted?
+- **BQ2:** Which payment-method sequences are most associated with money laundering, and how can banks use these patterns to target checks while minimising unnecessary reviews of legitimate transactions?
 
 ## Repository layout
 
