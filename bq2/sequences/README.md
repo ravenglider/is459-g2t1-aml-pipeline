@@ -2,7 +2,7 @@
 
 **Owner:** Role 5 (name: ____________)
 
-Glue Spark job that chains hops (money received by an account, then sent on within 24h) into payment-method and currency sequences with laundering labels.
+Glue Spark job that chains hops (money received by an account, then sent on within 24h) into payment-method sequences with laundering labels.
 
 ## What to commit here
 
