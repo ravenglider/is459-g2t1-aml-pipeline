@@ -1,6 +1,6 @@
 # etl/ (Role 2: Shared Spark ETL)
 
-Owner: WHG
+Owner: Amareet
 
 ## What it does
 A Glue Spark job that turns the raw IBM transactions into **transactions_clean**: typed and de-duplicated, every amount converted to USD (Ruble rate derived from the data), laundering rows linked to their attempt and shape from IBM's patterns file, quality-checked, and stored as Parquet split by dataset and date. Every BQ1 and BQ2 job reads this table.
