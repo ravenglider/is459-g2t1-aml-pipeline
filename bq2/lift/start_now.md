@@ -90,7 +90,7 @@ Fill this table only after actual runs. The README currently records preparation
 
 | Query | Actual outcome / counts | Query execution ID | Time | Bytes scanned |
 |---|---|---|---|---|
-| 1: cleaned schema | 20 columns confirmed from pasted result; correct screenshot pending | Not supplied | Not supplied | Not supplied |
+| 1: cleaned schema | 20 columns confirmed from pasted result and corrected screenshot | Not supplied | Not supplied | Not supplied |
 | 2: visible inputs | Only transactions_clean among queried names | Not supplied | 460 ms | 0.04 KB |
 | 3: one-day HI check | 4,465,985 transactions, 1,056 laundering, 0 missing USD (simplified console query) | Not supplied | 754 ms | 7.32 KB |
 | 4: full HI baseline | Counts/date bounds match Role 2 | Not supplied | 1.384 sec | 91.46 KB |

@@ -25,11 +25,11 @@ Local synthetic test results are verification evidence only and must not be past
 
 ## Console verification — 2 Nov 2026
 
-Evidence: [screenshot index](screenshots/README.md). Schema verified against the 20-column result pasted in chat; the supplied file named `01-cleaned-schema.png` actually shows console home and has been retained as `00-personal-console-home.png`. A genuine schema-result screenshot is pending.
+Evidence: [screenshot index](screenshots/README.md). Schema verified against both the 20-column result pasted in chat and the corrected `01-cleaned-schema.png`. The earlier incorrectly named console-home image is retained separately as `00-personal-console-home.png`.
 
 | Check | Observed result | Displayed runtime | Displayed data scanned |
 |---|---|---|---|
-| Cleaned schema | 20 columns, required fields/types present (pasted result) | Not supplied | Not supplied |
+| Cleaned schema | 20 columns, required fields/types present (pasted result and corrected screenshot) | Not supplied | Not supplied |
 | HI, 2022-09-01 | 4,465,985 transactions, 1,056 laundering, 0 missing USD | 754 ms | 7.32 KB |
 | Full HI | 31,898,218 total = 35,230 laundering + 31,862,988 legitimate; 2022-09-01–2022-09-28 | 1.384 sec | 91.46 KB |
 | Full LI | 31,251,469 total = 16,041 laundering + 31,235,428 legitimate; 2022-09-01–2022-09-27 | 1.075 sec | 69.79 KB |
