@@ -12,6 +12,7 @@
 | Naming prefix | `is459-g2t1-` (hyphens) / `is459_g2t1_` (underscores, for Glue databases) |
 | Glue database (data catalog) | `is459_g2t1_aml` |
 | Athena query result location | `s3://is459-g2t1-aml-athena-bucket/results/` |
+| Athena CTAS | Always set `external_location` to your own folder in the processed bucket. The folder must be empty before each run. |
 | Glue role to use for your jobs | `AWSGlueServiceRole-is459g2t1` |
 | Budget | `is459-g2t1-budget`, USD 250 for the whole duration. Budget limit set at USD 230, with alerts to our SMU emails at 50% and 80% |
 
