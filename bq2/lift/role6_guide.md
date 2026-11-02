@@ -10,6 +10,8 @@ Latest team updates supplied by Xiang Ying: cleaned HI/LI are ready in Athena; H
 
 ## Start now
 
+For the click-by-click version, use [start_now.md](start_now.md) and run the five statements in [start_now.sql](start_now.sql) individually.
+
 1. Read `etl/schema_transactions_clean.md` and `input_contract.md`. Your source database is `is459_g2t1_aml`, region `us-east-1`. You use Role 2 outputs; do not repeat ingestion, FX conversion or heavy sequence joins in Athena.
 2. In AWS Console → Athena → query editor, choose the existing workgroup/database and engine 3. Run the first query in `validation.sql`, first on a short `txn_date` range if developing. It checks existing cleaned data and needs no Role 5 table. Remove the optional date filter for final full-dataset reconciliation. Never mix sample/HI/LI without grouping and explicit dataset filters.
 3. Confirm with Ji Ning: both labelled and legitimate chains, stable chain IDs, exact bank+account linking, 24h policy, 2/3-hop rules, overlap policy, canonical method strings, label rule, and membership linking each hop to `txn_id`. Give them `input_contract.md`. This is an internal handoff draft; no message has been sent.

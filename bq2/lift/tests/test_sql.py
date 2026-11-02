@@ -128,6 +128,36 @@ class AnalyticsSQLTests(unittest.TestCase):
         self.assertEqual(self.db.execute("SELECT SUM(sequence_count) FROM bq2_sankey WHERE dataset='HI-Medium'").fetchone()[0], 202)
         self.assertIsNone(self.db.execute("SELECT method_3 FROM bq2_sankey WHERE sequence_length=2 LIMIT 1").fetchone()[0])
 
+    def test_start_now_queries_need_only_cleaned_data_and_metadata(self):
+        self.fixture()
+        self.db.executescript("""
+            ALTER TABLE transactions_clean ADD COLUMN txn_date TEXT DEFAULT '2022-09-01';
+            ALTER TABLE transactions_clean ADD COLUMN usd_missing INT DEFAULT 0;
+            ATTACH DATABASE ':memory:' AS information_schema;
+            CREATE TABLE information_schema.columns (
+                table_schema TEXT, table_name TEXT, column_name TEXT,
+                data_type TEXT, ordinal_position INT);
+            CREATE TABLE information_schema.tables (table_schema TEXT, table_name TEXT);
+            INSERT INTO information_schema.tables VALUES ('is459_g2t1_aml', 'transactions_clean');
+            INSERT INTO information_schema.columns VALUES
+                ('is459_g2t1_aml', 'transactions_clean', 'txn_id', 'bigint', 1);
+            DROP TABLE bq2_sequences;
+            DROP TABLE bq2_sequence_transactions;
+        """)
+        sql = '\n'.join(line for line in (SQL_DIR / 'start_now.sql').read_text().splitlines()
+                        if not line.lstrip().startswith('--'))
+        statements = [s for s in sql.split(';') if s.strip()]
+        self.assertEqual(len(statements), 5)
+        outputs = [list(self.db.execute(s.replace('is459_g2t1_aml.', ''))) for s in statements]
+        self.assertEqual([r['table_name'] for r in outputs[1]], ['transactions_clean'])
+        self.assertEqual(outputs[2][0]['invalid_labels'], 0)
+        self.assertEqual(outputs[2][0]['usd_flag_issues'], 0)
+        hi, li = outputs[3][0], outputs[4][0]
+        self.assertEqual((hi['transactions'], hi['laundering_transactions']), (204, 2))
+        self.assertEqual((li['transactions'], li['laundering_transactions']), (103, 1))
+        self.assertAlmostEqual(hi['transaction_laundering_rate'], 2 / 204)
+        self.assertEqual(hi['transactions'], hi['laundering_transactions'] + hi['legitimate_transactions'])
+
     def test_empty_input_does_not_invent_results(self):
         for filename in ('bq2_lift.sql', 'tradeoff.sql', 'robustness.sql', 'sankey.sql'):
             self.run_sql(filename)

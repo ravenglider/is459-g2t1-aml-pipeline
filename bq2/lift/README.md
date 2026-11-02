@@ -1,12 +1,12 @@
 # BQ2 analytics and targeting (Role 6)
 
-Owner: Xiang Ying. Status: SQL and synthetic checks prepared; not deployed or run on AWS.
+Owner: Xiang Ying. Status: SQL and eight synthetic checks prepared. AWS login/workgroup checked; first query submission blocked by result-bucket permissions before execution. No real-data analytics completed.
 
 ## What it does
 
 Ranks payment-method sequences by laundering lift, compares top-3/5/10 rules with reviewing all transactions, and evaluates frozen HI rules on LI-Medium. Outputs support the ranked table, Sankey, trade-off chart and targeted checklist promised on proposal pages 8–9.
 
-**Start with [Role 6 guide](role6_guide.md).** Role 5 has no committed schema yet. [Input contract](input_contract.md) is a proposal for Ji Ning to confirm, not documentation of an existing table.
+**Start with the [numbered walkthrough](start_now.md) and [five pre-Role-5 queries](start_now.sql).** The [Role 6 guide](role6_guide.md) explains the metric choices. Role 5 has no committed schema yet. [Input contract](input_contract.md) is a proposal for Ji Ning to confirm, not documentation of an existing table.
 
 ## AWS resources
 
@@ -22,6 +22,14 @@ Existing resources: region `us-east-1`, database `is459_g2t1_aml`, Athena workgr
 | `sankey.sql` | lift | `bq2_sankey` / `bq2_sankey/` |
 
 All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-g2t1-aml-processed-bucket/`. Input locations: [input_contract.md](input_contract.md).
+
+## Current progress
+
+- Completed locally: analytics SQL, eight synthetic checks, proposed Role 5 contract, Tableau build guide, and a numbered Athena walkthrough with five queries that do not depend on Role 5.
+- AWS check (2 Nov 2026): current login works and `primary` uses Athena engine 3. First metadata query was rejected before execution: `Unable to verify/create output bucket is459-g2t1-aml-athena-bucket` / `INSUFFICIENT_PERMISSIONS`. No query execution ID was issued. Use the correct team account/role and resolve result-bucket access with Sonia.
+- Still awaiting successful execution: schema/visibility checks, one-day HI quality check, full HI/LI transaction baselines.
+- Awaiting Role 5: agreed sequence schema/rules and labelled HI/LI chains with transaction membership.
+- Still pending: real sequence rankings/trade-offs, Tableau workbook/screenshots and end-to-end BQ2 execution.
 
 ## How to run
 
