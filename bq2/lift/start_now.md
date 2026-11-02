@@ -1,6 +1,6 @@
 # Start Role 6 now: numbered walkthrough
 
-This walkthrough needs only Role 2's cleaned data. Do these steps in order. The SQL is in [start_now.sql](start_now.sql). It does not create tables, run Glue, reset S3 folders or depend on Role 5. The first AWS query submission was attempted on 2 Nov 2026 and rejected before execution because the current login could not verify the result bucket. No data results have been obtained.
+This walkthrough needs only Role 2's cleaned data. Do these steps in order. The SQL is in [start_now.sql](start_now.sql). It does not create tables, run Glue, reset S3 folders or depend on Role 5. Xiang Ying subsequently completed the console checks on 2 Nov 2026. See [verified results](results.md#console-verification--2-nov-2026) and [saved screenshots](screenshots/README.md). The earlier CLI error used a different personal account.
 
 ## 1. Open the right GitHub branch
 
@@ -20,16 +20,16 @@ Sign in to the team's AWS account using your existing login. Search for **Athena
 
 Use the existing workgroup configuration. If the database is missing or access is denied, check the account/region and ask Sonia about your access. Do not create a new database or recreate Role 2's table. These steps follow [AWS's Athena getting-started guidance](https://docs.aws.amazon.com/athena/latest/ug/getting-started.html), using your team's existing resources rather than the tutorial's sample resources.
 
-## Resolve the current access issue before step 3
+## Historical CLI access issue (team-console checks subsequently succeeded)
 
-The AWS CLI login authenticated and the `primary` workgroup uses engine 3. However, the first query was rejected before execution:
+The earlier CLI login used the personal account, whereas Xiang Ying used the team console for successful queries. The CLI attempt was rejected before execution:
 
 ```text
 Unable to verify/create output bucket is459-g2t1-aml-athena-bucket
 AthenaErrorCode: INSUFFICIENT_PERMISSIONS
 ```
 
-Copy this to Sonia yourself (not sent):
+Only if the error also occurs in the correct team account, use this message (not sent):
 
 > My Role 6 first Athena query could not start: `Unable to verify/create output bucket is459-g2t1-aml-athena-bucket` / `INSUFFICIENT_PERMISSIONS`. I used us-east-1, primary, database is459_g2t1_aml and the documented staging prefix results/. The CLI login authenticates and primary is readable, but no query ID was issued. Could you confirm I am using the correct team account/role and check that role's result-bucket access and bucket policy? I have not changed IAM, buckets or the working pipeline.
 
@@ -90,11 +90,11 @@ Fill this table only after actual runs. The README currently records preparation
 
 | Query | Actual outcome / counts | Query execution ID | Time | Bytes scanned |
 |---|---|---|---|---|
-| 1: cleaned schema | Submission blocked: result-bucket permissions | Not issued | Not available | Not available |
-| 2: visible inputs | Not submitted | — | — | — |
-| 3: one-day HI check | Not submitted | — | — | — |
-| 4: full HI baseline | Not submitted | — | — | — |
-| 5: full LI baseline | Not submitted | — | — | — |
+| 1: cleaned schema | 20 columns confirmed from pasted result; correct screenshot pending | Not supplied | Not supplied | Not supplied |
+| 2: visible inputs | Only transactions_clean among queried names | Not supplied | 460 ms | 0.04 KB |
+| 3: one-day HI check | 4,465,985 transactions, 1,056 laundering, 0 missing USD (simplified console query) | Not supplied | 754 ms | 7.32 KB |
+| 4: full HI baseline | Counts/date bounds match Role 2 | Not supplied | 1.384 sec | 91.46 KB |
+| 5: full LI baseline | Counts/date bounds match Role 2 | Not supplied | 1.075 sec | 69.79 KB |
 
 Add these verified results to `results.md` and change the README's progress status only for steps actually completed. Commit those documentation changes and push the same Role 6 branch. If you share the aggregate outputs and query details in this chat, they can be interpreted and recorded here without exposing AWS credentials.
 

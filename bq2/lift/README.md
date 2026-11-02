@@ -1,6 +1,6 @@
 # BQ2 analytics and targeting (Role 6)
 
-Owner: Xiang Ying. Status: SQL and eight synthetic checks prepared. AWS login/workgroup checked; first query submission blocked by result-bucket permissions before execution. No real-data analytics completed.
+Owner: Xiang Ying. Status: cleaned schema and HI/LI baselines verified from Xiang Ying's console results; screenshots saved. Sequence analytics remain pending Role 5's confirmed inputs.
 
 ## What it does
 
@@ -26,8 +26,9 @@ All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-
 ## Current progress
 
 - Completed locally: analytics SQL, eight synthetic checks, proposed Role 5 contract, Tableau build guide, and a numbered Athena walkthrough with five queries that do not depend on Role 5.
-- AWS check (2 Nov 2026): current login works and `primary` uses Athena engine 3. First metadata query was rejected before execution: `Unable to verify/create output bucket is459-g2t1-aml-athena-bucket` / `INSUFFICIENT_PERMISSIONS`. No query execution ID was issued. Use the correct team account/role and resolve result-bucket access with Sonia.
-- Still awaiting successful execution: schema/visibility checks, one-day HI quality check, full HI/LI transaction baselines.
+- Completed in the team console: required schema confirmed from pasted results, one-day HI missing-USD check passed, full HI/LI counts reconciled, proposed input names checked. See [results](results.md) and [screenshots](screenshots/README.md).
+- Earlier CLI access failure was in a different personal account; it is not a blocker for the successful team-console session.
+- Evidence still needed: genuine schema-result screenshot and query execution IDs. The supplied `01-cleaned-schema.png` shows console home and is preserved under `00-personal-console-home.png`.
 - Awaiting Role 5: agreed sequence schema/rules and labelled HI/LI chains with transaction membership.
 - Still pending: real sequence rankings/trade-offs, Tableau workbook/screenshots and end-to-end BQ2 execution.
 
