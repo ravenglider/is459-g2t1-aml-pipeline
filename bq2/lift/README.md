@@ -28,7 +28,7 @@ All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-
 - Completed locally: analytics SQL, eight synthetic checks, proposed Role 5 contract, Tableau build guide, and a numbered Athena walkthrough with five queries that do not depend on Role 5.
 - Completed in the team console: required schema confirmed from pasted results, one-day HI missing-USD check passed, full HI/LI counts reconciled, proposed input names checked. See [results](results.md) and [screenshots](screenshots/README.md).
 - Earlier CLI access failure was in a different personal account; it is not a blocker for the successful team-console session.
-- All five query-result screenshots are saved, including the corrected `01-cleaned-schema.png`. Query execution IDs remain unrecorded. The earlier console-home image is preserved separately as context.
+- All five query-result screenshots are saved, including the corrected `01-cleaned-schema.png`. Query execution IDs remain unrecorded.
 - Awaiting Role 5: agreed sequence schema/rules and labelled HI/LI chains with transaction membership.
 - Still pending: real sequence rankings/trade-offs, Tableau workbook/screenshots and end-to-end BQ2 execution.
 

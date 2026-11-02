@@ -25,7 +25,7 @@ Local synthetic test results are verification evidence only and must not be past
 
 ## Console verification — 2 Nov 2026
 
-Evidence: [screenshot index](screenshots/README.md). Schema verified against both the 20-column result pasted in chat and the corrected `01-cleaned-schema.png`. The earlier incorrectly named console-home image is retained separately as `00-personal-console-home.png`.
+Evidence: [screenshot index](screenshots/README.md). Schema verified against both the 20-column result pasted in chat and the corrected `01-cleaned-schema.png`.
 
 | Check | Observed result | Displayed runtime | Displayed data scanned |
 |---|---|---|---|
