@@ -59,3 +59,7 @@ _2 to 3 lines._
 ### Contribution summary (for the Week 13 slide)
 
 _1 to 2 lines._
+
+## Role 6 progress — Xiang Ying
+
+BQ2 SQL inputs and [Tableau build guide](bq2_tableau.md) are prepared. Proposed sources: `bq2_lift`, `bq2_tradeoff`, `bq2_robustness`, `bq2_sankey` in `is459_g2t1_aml`. They have not been deployed by this work. Role 5's confirmed HI/LI chains and transaction membership are required before real-data visuals. BQ2 workbook/screenshots and measured results remain pending. Update this section after execution and push the completion evidence.
