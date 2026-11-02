@@ -2,7 +2,7 @@
 
 ## Status
 
-Contract version: `v1`. Ji Ning approved documenting this 21-column proposal after agreeing analytical requirements with Xiang Ying (Role 6). Exact interface approval from Xiang Ying is still pending. No builder, table, development batch or AWS deployment is claimed by this document.
+Contract version: `v1`. Ji Ning approved documenting this 21-column proposal after agreeing analytical requirements with Xiang Ying (Role 6). Xiang Ying has officially approved the exact 21-column interface and confirmed that no additional fields or physical membership table are needed. No builder, table, development batch or AWS deployment is claimed by this document.
 
 The confirmed analytical requirements and pending operational decisions are in [sequence_rules.md](sequence_rules.md). This file specifies the proposed physical interface. It follows the repository's lowercase table/column names, processed-bucket ownership and `us-east-1` region conventions.
 
@@ -83,7 +83,7 @@ The two currency arrays retain direction: at position i, `payment_currencies[i]`
 
 The logical unique key is `(dataset, ordered txn_ids)`. Deduplicate on that key, not solely on `sequence_id` or method pattern. The builder must first validate input `(dataset, txn_id)` uniqueness; a hash is not a guarantee. Conflicting IDs block publication, and even identical repeated source rows require coordinated resolution to keep Role 6's full-source denominators consistent. See the source-ID policy in the rules document.
 
-`sequence_id` is SHA-256 over an unambiguous serialization of rule version, dataset and ordered IDs. Exclude labels, method/currency attributes and runtime values. The precise byte serialization must be fixed and covered by a repeatability fixture before implementation is accepted; it is not yet specified here. Identical input identities under the same rule version must retain their sequence IDs across reruns.
+`sequence_id` is SHA-256 over UTF-8 bytes of `rule_version + LF + dataset + LF + comma-separated ordered transaction IDs`. Use LF (`0A`) only, no byte-order mark, no trailing newline or spaces. IDs are signed bigint values rendered directly as canonical decimal strings, with no floating-point conversion, leading plus sign or padding. Public output uses rule version `v1` and an approved dataset value. Exclude labels, method/currency attributes and runtime values. The exact input `v1\nsample\n101,102,103` (where `\n` denotes one LF byte) hashes to `d7ccc2d78595f228b8c0957d1b22ebf1cac5d78e4b294f4c09a809c9861c7a30`. Identical input identities under the same rule version retain their sequence IDs across reruns; tests fix this byte representation and hash.
 
 Every original label is 0 or 1. `laundering_count` is their sum; `any_laundering` indicates a sum above zero; `all_laundering` indicates a sum equal to length. `final_is_laundering` is the last original label, not a derived chain label. For `[1,0]`, `any_laundering=1` and `final_is_laundering=0`.
 
@@ -137,7 +137,7 @@ A manifest outside table data folders should record source snapshot/coverage evi
 
 ## Xiang Ying schema-approval checklist
 
-Ask Xiang Ying to approve these names and representations before implementation, then revise Role 6's own contract, SQL and validation consistently:
+Xiang Ying has approved these names and representations, with no additional fields or physical membership table required; Role 6's own contract, SQL and validation must reflect the approved interface consistently:
 
 1. Keep `method_sequence` and the existing literal ` -> ` separator.
 2. Replace generic sequence `is_laundering` references with `any_laundering` for descriptive lift.
