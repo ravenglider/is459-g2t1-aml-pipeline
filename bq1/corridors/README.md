@@ -16,7 +16,7 @@ Aggregates cross-bank laundering activity by bank pair, computes the Blindspot G
 ## Notes for this role
 
 - Reads from `transactions_clean` (Role 2, both datasets — filtered to `dataset = 'HI-Medium'` here).
-- Writes: see "Inputs and outputs" below — not in the processed bucket as originally planned (see note).
+- Writes: see "Inputs and outputs" below — all four tables write to the processed bucket.
 - Merge Role 4's graph findings (intermediary banks, clusters) into the priority list once available.
 - Tableau heatmap and ranked table go in `viz/`.
 
@@ -37,15 +37,17 @@ Reads `transactions_clean`, aggregates laundering value by bank pair (direct and
 |  | Table | S3 path |
 |---|---|---|
 | Reads | is459_g2t1_aml.transactions_clean | s3://is459-g2t1-aml-processed-bucket/transactions_clean/ |
-| Writes | is459_g2t1_aml.bq1_corridors_ranked | s3://is459-g2t1-aml-athena-bucket/results/tables/8c7b8406-1b52-48e2-aca9-2fbacfd51185/ |
-
-**Note:** the shared Athena workgroup enforces a centralized output location, so these tables did not write to `processed-bucket/bq1_corridors/` as originally planned in the handoff doc — they're under the Athena results bucket instead, in an auto-generated per-table folder. Flagged to Sonia; may need a workgroup setting change if Role 4's Neo4j load needs a predictable path.
+| Writes | is459_g2t1_aml.bq1_direct_corridors | s3://is459-g2t1-aml-processed-bucket/bq1_direct_corridors/ |
+| Writes | is459_g2t1_aml.bq1_attempt_banks | s3://is459-g2t1-aml-processed-bucket/bq1_attempt_banks/ |
+| Writes | is459_g2t1_aml.bq1_shared_attempt_value | s3://is459-g2t1-aml-processed-bucket/bq1_shared_attempt_value/ |
+| Writes | is459_g2t1_aml.bq1_corridors_ranked | s3://is459-g2t1-aml-processed-bucket/bq1_corridors_ranked/ |
 
 ## How to run
 
 1. Open `bq1_corridors.sql` in the Athena query editor, database `is459_g2t1_aml`.
-2. Run the 4 `CREATE TABLE` statements in order (if re-running, `DROP TABLE` each one first).
-3. Query `bq1_corridors_ranked` for the final ranked list.
+2. Run each statement separately, in order — Athena only runs one statement per click.
+3. On a rerun: run the 4 `DROP TABLE IF EXISTS` statements first, then **delete the contents of all four S3 folders above** before running the `CREATE TABLE` statements again — each table writes to a fixed folder now, and `DROP TABLE` does not delete the underlying files.
+4. Query `bq1_corridors_ranked` for the final ranked list.
 
 ## Step Functions info for Sonia
 
@@ -54,7 +56,7 @@ Reads `transactions_clean`, aggregates laundering value by bank pair (direct and
 | Job type | Athena (`arn:aws:states:::athena:startQueryExecution.sync`) |
 | Exact name | `bq1_corridors.sql` (4 chained CREATE TABLE statements) |
 | Output table | `is459_g2t1_aml.bq1_corridors_ranked` |
-| Output S3 path | `s3://is459-g2t1-aml-athena-bucket/results/tables/8c7b8406-1b52-48e2-aca9-2fbacfd51185/` (see note above — not the processed bucket) |
+| Output S3 path | `s3://is459-g2t1-aml-processed-bucket/bq1_corridors_ranked/` |
 | Depends on | `is459_g2t1_aml.transactions_clean` (Role 2) only |
 | Typical run time on full data | All 4 queries complete in under 5 seconds combined on HI-Medium |
 
