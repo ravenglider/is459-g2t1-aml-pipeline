@@ -1,6 +1,6 @@
 # BQ2 Tableau build guide — Xiang Ying
 
-Status: instructions and aggregate SQL prepared; no Tableau workbook or real charts created yet.
+Status: four-sheet dashboard layout and aggregate SQL prepared; real findings and a native Tableau workbook remain pending. Native Tableau UI access was unavailable in this session; a workbook has not been created.
 
 ## Connection
 
@@ -36,3 +36,28 @@ Because this SQL keeps full patterns in one row, summing its weights once per da
 Suggested layout: ranked patterns and Sankey above, policy comparison and targeted checklist below; purple for laundering and pink for legitimate reviews, matching the proposal. Include dataset, chain length, support threshold and policy controls only where meaningful. Do not let a display filter silently recompute rates with a different denominator.
 
 Save `viz/bq2_dashboard.twb` without embedded credentials, then screenshot the actual dashboard into `viz/screenshots/` for slides. Before committing, inspect XML for credentials/private paths and use `git check-ignore` on extracts. Commit `.twb` only; `.twbx` and `.hyper` embed data. Add exact connection steps, real screenshots and measured completion status to your README. Never present a synthetic test chart as a dataset result.
+
+## Four-sheet layout prepared before Role 5
+
+Dashboard name: `BQ2 — Payment-method sequences`. Fixed desktop canvas: 1440 × 1000. Suggested layout positions in pixels:
+
+| Area / sheet | X, Y | Width × height | Source and encoding |
+|---|---|---|---|
+| Header + status | 0, 0 | 1440 × 100 | Title and `Preparation only — awaiting Role 5 sequence outputs` |
+| Ranked sequences | 0, 100 | 720 × 400 | `bq2_lift`: method/length, rank, support, laundering rate and lift |
+| Payment-method Sankey | 720, 100 | 720 × 400 | `bq2_sankey`: ordered method levels, laundering-chain counts |
+| Targeted vs broad checks | 0, 500 | 720 × 400 | `bq2_tradeoff`: policy vs catch/legitimate-review percentages |
+| Targeted checklist | 720, 500 | 720 × 400 | HI top-N from lift, with LI status/rank/support from robustness |
+| Definitions / limitations | 0, 900 | 1440 × 100 | Units, support cutoff, HI in-sample / LI frozen-rule status |
+
+Use purple `#5B2CCB` for laundering/catch and pink `#D74C78` for legitimate reviews, with direct labels so colour is not the only distinction. Keep result areas empty or show a plain pending-data note. Do not add dummy winners, zeros or proposal percentages. This is an authoring specification, not a completed Tableau dashboard or a screenshot of one.
+
+Prepare worksheet names exactly: `01 Ranked sequences`, `02 Payment-method Sankey`, `03 Targeted vs broad checks`, `04 Targeted checklist`. A 2-hop/3-hop Sankey may use separate underlying worksheets later; the four areas are the reader-facing dashboard views.
+
+Control behaviour once connected:
+- Evaluation dataset: changes the ranking/Sankey/trade-off dataset, but the operational checklist always selects the frozen HI-ranked rule set and labels it as such. LI fields describe evaluation of those rules.
+- Policy parameter N: choices 3, 5, 10. It selects the checklist and highlights the matching trade-off policy; retain all policy rows in the comparison.
+- Sequence length: applies to ranking/Sankey display only. It must not silently recompute the all-length transaction trade-off or change the selected HI rules. Label display-only filters.
+- Support threshold: show the executed SQL cutoff as text. A Tableau filter cannot substitute for rerunning the corresponding support/rank sensitivity analysis.
+
+When the aggregates exist, follow the earlier connection/field instructions, populate the sheets, place them in these areas, and save `viz/bq2_dashboard.twb`. Verify repeated-method nodes, rates/denominators, policy selection and NULL handling in Tableau before marking it complete. No AWS login or embedded credentials belong in the repository.

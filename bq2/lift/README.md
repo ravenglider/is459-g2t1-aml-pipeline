@@ -29,7 +29,10 @@ All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-
 - Completed in the team console: required schema confirmed from pasted results, one-day HI missing-USD check passed, full HI/LI counts reconciled, proposed input names checked. See [results](results.md) and [screenshots](screenshots/README.md).
 - Earlier CLI access failure was in a different personal account; it is not a blocker for the successful team-console session.
 - All five query-result screenshots are saved, including the corrected `01-cleaned-schema.png`. Query execution IDs remain unrecorded.
-- Awaiting Role 5: agreed sequence schema/rules and labelled HI/LI chains with transaction membership.
+- Handoff ready to share: [sample-first request and pending decision record](input_contract.md#sample-first-handoff-for-ji-ning). Ji Ning has not started the builder; no agreement or direct message is claimed.
+- Metric choices reviewed and documented: [decision table](role6_guide.md#metric-review-before-the-sample-handoff).
+- Tableau preparation complete as a [four-sheet layout specification](../../viz/bq2_tableau.md#four-sheet-layout-prepared-before-role-5); native workbook and populated charts remain pending.
+- Awaiting Role 5: agreed sequence schema/rules, development batch, then full labelled HI/LI chains with transaction membership.
 - Still pending: real sequence rankings/trade-offs, Tableau workbook/screenshots and end-to-end BQ2 execution.
 
 ## How to run

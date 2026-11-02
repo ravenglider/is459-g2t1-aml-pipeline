@@ -38,6 +38,21 @@ All rule evaluations are retrospective flags, not guaranteed laundering detectio
 
 For overlap at N, count rows in `bq2_robustness` where `hi_rank <= N AND li_rank <= N`. Report both actual eligible top-set sizes; fewer than N supported patterns must not be presented as a full top-N comparison. `bq2_tradeoff` already reports actual selected pattern count and evaluates frozen HI rules on both datasets.
 
+## Metric review before the sample handoff
+
+These choices match the prepared SQL; they remain proposed where team agreement is needed.
+
+| Choice | Prepared implementation | What must be confirmed |
+|---|---|---|
+| Sequence lift | Pattern's positive-chain rate / all-chain positive rate in the same dataset, including rare patterns in the baseline | Team accepts the documented correction to the proposal's mixed transaction/chain baseline |
+| Support | At least 100 total chain occurrences, not 100 positive chains | Provisional cutoff; assess 50/100/500 sensitivity on full data before a recommendation |
+| Review unit | DISTINCT `(dataset, txn_id)` union across matched chains | Membership available; do not add positive-chain counts as if they were distinct laundering transfers |
+| Broad rule | Review all cleaned transactions in the evaluation dataset | Explicit 100%/100% endpoint, not the proposal's undefined 70%/25% illustration |
+| Transfer to LI | Freeze HI patterns, apply unchanged to LI; score LI against LI baseline | Same chain rules and full LI population; report absent/low-support patterns rather than dropping them |
+| Recommendation | Compare top-3/5/10 under an agreed review budget or catch target | No winning N selected before results and operating target exist |
+
+No production metric or cutoff has been approved by Ji Ning merely by publishing this document. A small handpicked sample can verify counts and joins, but not support a claim about real prevalence or the best policy. Final reporting uses full data, and HI performance remains in-sample.
+
 ## Role 3's USD outliers
 
 Primary BQ2 metrics are counts, so do not automatically remove >=$20M transactions or the chains containing them. That would change the population/labels and could hide laundering. Role 3's threshold is a team-defined synthetic-data sensitivity rule, not a universal AML cutoff. This package does not sum USD or claim money-flow value. Sankey thickness is explicitly laundering-chain count. If adding USD outcomes later, define the unit (e.g. distinct flagged transfers' paid USD), avoid summing the same transfer across chains, show full and < $20M versions with excluded counts, and recompute matched-population denominators. Do not sum every hop as if it were unique funds laundered.

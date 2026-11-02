@@ -4,7 +4,7 @@ This walkthrough needs only Role 2's cleaned data. Do these steps in order. The 
 
 ## 1. Open the right GitHub branch
 
-Open the repository and select `role6/bq2-analytics`, then `bq2/lift/`. The prepared work is on this branch, not main. Read this walkthrough first; `role6_guide.md` explains the metric choices in more detail.
+Open the repository and select `main`, then `bq2/lift/`. The reviewed Role 6 preparation is published on main. Read this walkthrough first; `role6_guide.md` explains the metric choices in more detail.
 
 ## 2. Open Athena
 
@@ -76,7 +76,7 @@ Run numbered query 5 separately. Reference from `etl/data_quality.md`: 31,251,46
 
 Copy this message to Ji Ning yourself (it has not been sent):
 
-> I have prepared the Role 6 lift, top-3/5/10 trade-off and LI robustness SQL. Could you confirm your sequence table/schema and share a small sample containing both legitimate and laundering-labelled chains? I need a stable sequence ID, dataset, ordered payment methods, chain length, chain label, and the ordered transaction IDs belonging to each chain. Please also confirm the 24h rule, treatment of tied timestamps/overlaps, label rule, and whether both HI and LI are available. My proposed mapping is in bq2/lift/input_contract.md on role6/bq2-analytics; an adapter over your existing schema is fine.
+> I have prepared the Role 6 lift, top-3/5/10 trade-off and LI robustness SQL. Could you confirm your sequence table/schema and share a small sample containing both legitimate and laundering-labelled chains? I need a stable sequence ID, dataset, ordered payment methods, chain length, chain label, and the ordered transaction IDs belonging to each chain. Please also confirm the 24h rule, treatment of tied timestamps/overlaps, label rule, and whether both HI and LI are available. My proposed mapping is in bq2/lift/input_contract.md on main; an adapter over your existing schema is fine.
 
 Transaction membership can be a table or an existing transaction-ID array mapped to the proposed interface. It lets your trade-off count each transaction once even when chains overlap. You are asking to agree the interface, not asking Role 5 to adopt an unconfirmed design blindly.
 
@@ -96,6 +96,6 @@ Fill this table only after actual runs. The README currently records preparation
 | 4: full HI baseline | Counts/date bounds match Role 2 | Not supplied | 1.384 sec | 91.46 KB |
 | 5: full LI baseline | Counts/date bounds match Role 2 | Not supplied | 1.075 sec | 69.79 KB |
 
-Add these verified results to `results.md` and change the README's progress status only for steps actually completed. Commit those documentation changes and push the same Role 6 branch. If you share the aggregate outputs and query details in this chat, they can be interpreted and recorded here without exposing AWS credentials.
+Add these verified results to `results.md` and change the README's progress status only for steps actually completed. Commit those documentation changes and push the Role 6 working branch, then review it against current main before merging. If you share the aggregate outputs and query details in this chat, they can be interpreted and recorded here without exposing AWS credentials.
 
 **Stop point:** once these checks and the handoff request are complete, you have finished the useful pre-Role-5 execution work in this walkthrough. Do not run `bq2_lift.sql`, `tradeoff.sql`, `robustness.sql` or `sankey.sql` until Role 5's inputs and label/window rules are confirmed and the pre-CTAS checks in `validation.sql` pass. The final validation statement runs after the analytics tables exist.
