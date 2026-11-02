@@ -4,7 +4,7 @@
 
 Contract version: `v1`.
 
-The analytical requirements below were confirmed with Xiang Ying (Role 6), as reported by Ji Ning (Role 5), and approved for documentation. The proposed output interface is in [schema_bq2_sequences.md](schema_bq2_sequences.md); Xiang Ying still needs to approve its exact column names and representations.
+The analytical requirements below were confirmed with Xiang Ying (Role 6), as reported by Ji Ning (Role 5), and approved for documentation. The output interface is in [schema_bq2_sequences.md](schema_bq2_sequences.md); Xiang Ying has officially approved the 21-column schema and confirmed that no additional fields or physical membership table are needed.
 
 These documents do not establish that a builder, table, development batch or deployment exists. No real sequence results or performance measurements are claimed. Role 5 owns this directory; Role 6 owns downstream SQL, and Sonia owns orchestration changes.
 
@@ -145,7 +145,7 @@ Safe-rerun requirements:
 
 ## Decisions still requiring verification
 
-- Xiang Ying approval of exact column names, arrays, readable strings and development mapping in the schema document.
+- Xiang Ying has approved the exact column names, arrays, readable strings and development mapping in the schema document; no additional fields or physical membership table are needed.
 - Upstream timezone interpretation: raw timestamps have no timezone and Role 2 does not explicitly set a Spark session timezone. Preserve upstream meaning; do not assume local Singapore time.
 - Input uniqueness and required-field quality on actual data.
 - Development batch bounds/size, branch-growth limits, worker settings and full-data runtime/cost.
