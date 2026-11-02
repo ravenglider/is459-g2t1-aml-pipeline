@@ -14,4 +14,6 @@ SELECT dataset, method_sequence, sequence_length,
        support_count AS sequence_count,
        laundering_count AS laundering_sequence_count,
        support_count - laundering_count AS legitimate_sequence_count
-FROM is459_g2t1_aml.bq2_lift;
+FROM is459_g2t1_aml.bq2_lift
+-- Counts are identical across support policies; select exactly one copy.
+WHERE min_support = 50;

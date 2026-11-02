@@ -43,7 +43,7 @@ Check that `txn_id`, `txn_date`, `dataset`, `is_laundering`, `payment_format`, `
 
 ## 4. Run query 2: check what inputs are visible
 
-Run numbered query 2. `transactions_clean` should appear. The proposed `bq2_sequences` and `bq2_sequence_transactions` may not appear yet. That does not stop the remaining queries in this file. A missing metadata row can also reflect permissions or a different table name; confirm with Ji Ning rather than assuming their work is unfinished.
+Run numbered query 2. `transactions_clean` should appear. The proposed `bq2_sequences` and `bq2_sequences_dev` may not appear yet. That does not stop the remaining queries in this file. A missing metadata row can also reflect permissions or a different table name; confirm with Ji Ning rather than assuming their work is unfinished.
 
 If Role 5 tables appear, get their schema and rules before executing the prepared sequence SQL. Existing names alone do not prove schema compatibility.
 
@@ -72,13 +72,11 @@ Run numbered query 4. It intentionally has no date filter so its scope matches t
 
 Run numbered query 5 separately. Reference from `etl/data_quality.md`: 31,251,469 transactions, 16,041 laundering transactions, 31,235,428 legitimate transactions, dates 2022-09-01 through 2022-09-27. Treat those as documented references until verified in your account. Record actual outputs and query details. Never pool HI and LI into one laundering-rate denominator.
 
-## 8. Confirm the Role 5 handoff
+## 8. Get Role 5's development batch
 
-Copy this message to Ji Ning yourself (it has not been sent):
+Ji Ning has documented the 21-column v1 schema, and Role 6 SQL is aligned to it. Send the ready-to-share message in [input_contract.md](input_contract.md). Ask for the actual development table/schema, original dataset value, source coverage, builder/rule version and successful publication evidence. Ordered transaction membership is `txn_ids`, and targeting uses distinct `final_txn_id` values with original clean-source labels.
 
-> I have prepared the Role 6 lift, top-3/5/10 trade-off and LI robustness SQL. Could you confirm your sequence table/schema and share a small sample containing both legitimate and laundering-labelled chains? I need a stable sequence ID, dataset, ordered payment methods, chain length, chain label, and the ordered transaction IDs belonging to each chain. Please also confirm the 24h rule, treatment of tied timestamps/overlaps, label rule, and whether both HI and LI are available. My proposed mapping is in bq2/lift/input_contract.md on main; an adapter over your existing schema is fine.
-
-Transaction membership can be a table or an existing transaction-ID array mapped to the proposed interface. It lets your trade-off count each transaction once even when chains overlap. You are asking to agree the interface, not asking Role 5 to adopt an unconfirmed design blindly.
+Follow the isolated development mapping in that contract before running validations. No physical membership table is required. A sample-only batch tests the interface, not full HI/LI robustness or final rankings.
 
 ## 9. Prepare the Tableau layout
 

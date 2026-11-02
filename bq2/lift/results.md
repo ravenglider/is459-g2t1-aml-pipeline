@@ -38,3 +38,7 @@ Evidence: [screenshot index](screenshots/README.md). Schema verified against bot
 Full HI/LI counts reconcile to Role 2's documented counts. Query execution IDs were not supplied. These are input-readiness checks, not BQ2 sequence findings. No full-dataset duplicate-ID or full-dataset missing-USD check is claimed from these screenshots.
 
 Next action: confirm Ji Ning's actual table names/schema, HI/LI sequence availability, chain labels/windows and transaction membership. The absence of the proposed names is not proof the sequence job is unfinished. Do not execute dependent CTAS until the agreed interface and pre-CTAS validations pass.
+
+## Role 5 v1 implementation alignment
+
+Role 6 now consumes `any_laundering`, `final_txn_id` and ordered member arrays from the documented 21-column interface. Lift/rank and frozen HI rules are scoped by dataset, length and min_support (50/100/500). Targeting counts distinct final transfers against original clean labels/full denominators. Sankey uses one copy of pattern counts. Eleven synthetic SQL checks pass, including mixed positive chains ending in legitimate transfers, overlapping finals and separate lengths/cutoffs. No Athena sequence results, development-batch acceptance or native Tableau workbook is claimed. Array-specific Athena validation still requires actual-engine execution.

@@ -14,7 +14,7 @@ ORDER BY ordinal_position;
 SELECT table_name
 FROM information_schema.tables
 WHERE table_schema = 'is459_g2t1_aml'
-  AND table_name IN ('transactions_clean', 'bq2_sequences', 'bq2_sequence_transactions')
+  AND table_name IN ('transactions_clean', 'bq2_sequences', 'bq2_sequences_dev')
 ORDER BY table_name;
 
 -- 3. Small HI date-partition check before full-data queries.

@@ -10,79 +10,104 @@ WHERE dataset IN ('HI-Medium', 'LI-Medium')
 -- AND txn_date BETWEEN '2022-09-01' AND '2022-09-02'
 GROUP BY dataset;
 
--- Expect both datasets, >0 rows, unique chains = chain count, zero bad rows.
-SELECT dataset, COUNT(*) AS chains, COUNT(DISTINCT sequence_id) AS unique_chains,
-       SUM(CASE WHEN sequence_id IS NULL OR trim(sequence_id) = ''
-         OR method_sequence IS NULL OR trim(method_sequence) = ''
-         OR sequence_length IS NULL OR sequence_length NOT IN (2, 3)
-         OR cardinality(split(method_sequence, ' -> ')) <> sequence_length
-         OR is_laundering IS NULL OR is_laundering NOT IN (0, 1)
-         THEN 1 ELSE 0 END) AS bad_rows,
-       SUM(is_laundering) AS laundering_chains
+-- Run preflight statements before lineage joins. Expect both datasets, valid v1 rows,
+-- and equal row/unique-ID counts. A missing dataset is a failed readiness check.
+SELECT dataset, sequence_length, rule_version, COUNT(*) AS chains,
+       COUNT(DISTINCT sequence_id) AS unique_sequence_ids
 FROM is459_g2t1_aml.bq2_sequences
-WHERE dataset IN ('HI-Medium', 'LI-Medium') GROUP BY dataset;
+WHERE dataset IN ('HI-Medium', 'LI-Medium')
+GROUP BY dataset, sequence_length, rule_version;
 
--- Expect zero rows. Match complete hop set, no repeated transaction, correct MAX label.
-SELECT s.dataset, s.sequence_id
+-- Expect zero rows: required scalars, array shape, null elements and canonical tokens.
+SELECT dataset, sequence_id
+FROM is459_g2t1_aml.bq2_sequences
+WHERE dataset IN ('HI-Medium', 'LI-Medium') AND (
+  sequence_id IS NULL OR NOT regexp_like(sequence_id, '^[0-9a-f]{64}$')
+  OR rule_version IS NULL OR rule_version <> 'v1'
+  OR sequence_length IS NULL OR sequence_length NOT IN (2, 3)
+  OR method_sequence IS NULL OR payment_currency_sequence IS NULL
+  OR receiving_currency_sequence IS NULL OR start_date IS NULL
+  OR laundering_count IS NULL OR any_laundering IS NULL OR all_laundering IS NULL
+  OR final_txn_id IS NULL OR final_is_laundering IS NULL OR duration_seconds IS NULL
+  OR txn_ids IS NULL OR cardinality(txn_ids) <> sequence_length
+  OR any_match(txn_ids, x -> x IS NULL)
+  OR txn_timestamps IS NULL OR cardinality(txn_timestamps) <> sequence_length
+  OR any_match(txn_timestamps, x -> x IS NULL)
+  OR payment_methods IS NULL OR cardinality(payment_methods) <> sequence_length
+  OR any_match(payment_methods, x -> x IS NULL OR trim(x) = '' OR strpos(x, ' -> ') > 0)
+  OR payment_currencies IS NULL OR cardinality(payment_currencies) <> sequence_length
+  OR any_match(payment_currencies, x -> x IS NULL OR trim(x) = '' OR strpos(x, ' -> ') > 0)
+  OR receiving_currencies IS NULL OR cardinality(receiving_currencies) <> sequence_length
+  OR any_match(receiving_currencies, x -> x IS NULL OR trim(x) = '' OR strpos(x, ' -> ') > 0)
+  OR txn_laundering_labels IS NULL OR cardinality(txn_laundering_labels) <> sequence_length
+  OR any_match(txn_laundering_labels, x -> x IS NULL OR x NOT IN (0, 1))
+  OR gap_seconds IS NULL OR cardinality(gap_seconds) <> sequence_length - 1
+  OR any_match(gap_seconds, x -> x IS NULL OR x <= 0 OR x > 86400)
+  OR cardinality(array_distinct(txn_ids)) <> sequence_length
+);
+
+-- After preflight passes, expect zero rows: canonical strings, labels and endpoints.
+SELECT dataset, sequence_id
+FROM is459_g2t1_aml.bq2_sequences
+WHERE dataset IN ('HI-Medium', 'LI-Medium') AND (
+  method_sequence <> array_join(payment_methods, ' -> ')
+  OR payment_currency_sequence <> array_join(payment_currencies, ' -> ')
+  OR receiving_currency_sequence <> array_join(receiving_currencies, ' -> ')
+  OR laundering_count <> reduce(txn_laundering_labels, 0, (s, x) -> s + x, s -> s)
+  OR any_laundering <> CASE WHEN laundering_count > 0 THEN 1 ELSE 0 END
+  OR all_laundering <> CASE WHEN laundering_count = sequence_length THEN 1 ELSE 0 END
+  OR final_txn_id <> element_at(txn_ids, -1)
+  OR final_is_laundering <> element_at(txn_laundering_labels, -1)
+  OR duration_seconds <> date_diff('second', element_at(txn_timestamps, 1), element_at(txn_timestamps, -1))
+  OR duration_seconds <> reduce(gap_seconds, CAST(0 AS BIGINT), (s, x) -> s + x, s -> s)
+  OR start_date <> CAST(CAST(element_at(txn_timestamps, 1) AS DATE) AS VARCHAR)
+);
+
+-- Expect zero: duplicate ordered chains or duplicate sequence references.
+SELECT dataset, txn_ids, COUNT(*) AS copies
+FROM is459_g2t1_aml.bq2_sequences
+WHERE dataset IN ('HI-Medium', 'LI-Medium')
+GROUP BY dataset, txn_ids HAVING COUNT(*) > 1;
+
+SELECT dataset, sequence_id, COUNT(*) AS copies
+FROM is459_g2t1_aml.bq2_sequences
+WHERE dataset IN ('HI-Medium', 'LI-Medium')
+GROUP BY dataset, sequence_id HAVING COUNT(*) > 1;
+
+-- Expect zero: every member matches the source row and original attributes.
+-- The first clean-source check must establish unique (dataset, txn_id) before this.
+SELECT s.dataset, s.sequence_id, u.hop
 FROM is459_g2t1_aml.bq2_sequences s
-LEFT JOIN is459_g2t1_aml.bq2_sequence_transactions m
-  ON m.dataset = s.dataset AND m.sequence_id = s.sequence_id
+CROSS JOIN UNNEST(s.txn_ids) WITH ORDINALITY AS u(txn_id, hop)
 LEFT JOIN is459_g2t1_aml.transactions_clean t
-  ON t.dataset = m.dataset AND t.txn_id = m.txn_id
-WHERE s.dataset IN ('HI-Medium', 'LI-Medium')
-GROUP BY s.dataset, s.sequence_id, s.sequence_length, s.is_laundering
-HAVING COUNT(m.txn_id) <> s.sequence_length
-    OR COUNT(DISTINCT m.txn_id) <> s.sequence_length
-    OR COUNT(DISTINCT m.hop_index) <> s.sequence_length
-    OR MIN(m.hop_index) <> 1 OR MAX(m.hop_index) <> s.sequence_length
-    OR COUNT(t.txn_id) <> s.sequence_length
-    OR MAX(t.is_laundering) <> s.is_laundering;
+  ON t.dataset = s.dataset AND t.txn_id = u.txn_id
+WHERE s.dataset IN ('HI-Medium', 'LI-Medium') AND (
+  t.txn_id IS NULL
+  OR t.txn_ts IS DISTINCT FROM element_at(s.txn_timestamps, CAST(u.hop AS INTEGER))
+  OR t.payment_format IS DISTINCT FROM element_at(s.payment_methods, CAST(u.hop AS INTEGER))
+  OR t.payment_currency IS DISTINCT FROM element_at(s.payment_currencies, CAST(u.hop AS INTEGER))
+  OR t.receiving_currency IS DISTINCT FROM element_at(s.receiving_currencies, CAST(u.hop AS INTEGER))
+  OR t.is_laundering IS DISTINCT FROM element_at(s.txn_laundering_labels, CAST(u.hop AS INTEGER))
+);
 
--- Expect zero: orphan memberships or duplicate hop positions.
-SELECT m.dataset, m.sequence_id, m.hop_index, COUNT(*) AS rows_at_hop
-FROM is459_g2t1_aml.bq2_sequence_transactions m
-LEFT JOIN is459_g2t1_aml.bq2_sequences s
-  ON s.dataset = m.dataset AND s.sequence_id = m.sequence_id
-WHERE m.dataset IN ('HI-Medium', 'LI-Medium')
-GROUP BY m.dataset, m.sequence_id, m.hop_index
-HAVING COUNT(*) <> 1 OR COUNT(s.sequence_id) <> 1;
-
--- Expect zero: the same ordered chain must not appear under different IDs.
-WITH ordered_chains AS (
-  SELECT dataset, sequence_id, array_agg(txn_id ORDER BY hop_index) AS ordered_txn_ids
-  FROM is459_g2t1_aml.bq2_sequence_transactions
-  WHERE dataset IN ('HI-Medium', 'LI-Medium')
-  GROUP BY dataset, sequence_id
-)
-SELECT dataset, ordered_txn_ids, COUNT(*) AS duplicate_chains
-FROM ordered_chains
-GROUP BY dataset, ordered_txn_ids HAVING COUNT(*) > 1;
-
--- Expect zero: canonical method tokens must match actual transactions.
-SELECT s.dataset, s.sequence_id, m.hop_index
+-- Expect zero: adjacent links match bank/account and exact strictly-later <=24h rule.
+SELECT s.dataset, s.sequence_id, hop
 FROM is459_g2t1_aml.bq2_sequences s
-JOIN is459_g2t1_aml.bq2_sequence_transactions m
-  ON m.dataset = s.dataset AND m.sequence_id = s.sequence_id
-JOIN is459_g2t1_aml.transactions_clean t
-  ON t.dataset = m.dataset AND t.txn_id = m.txn_id
-WHERE s.dataset IN ('HI-Medium', 'LI-Medium')
-  AND (t.payment_format IS NULL OR
-       element_at(split(s.method_sequence, ' -> '), m.hop_index) <> t.payment_format);
+CROSS JOIN UNNEST(sequence(1, s.sequence_length - 1)) AS links(hop)
+JOIN is459_g2t1_aml.transactions_clean a
+  ON a.dataset = s.dataset AND a.txn_id = element_at(s.txn_ids, hop)
+JOIN is459_g2t1_aml.transactions_clean b
+  ON b.dataset = s.dataset AND b.txn_id = element_at(s.txn_ids, hop + 1)
+WHERE s.dataset IN ('HI-Medium', 'LI-Medium') AND (
+  a.to_bank IS NULL OR b.from_bank IS NULL OR a.to_account IS NULL OR b.from_account IS NULL
+  OR trim(a.to_account) = '' OR trim(b.from_account) = ''
+  OR a.to_bank <> b.from_bank OR a.to_account <> b.from_account
+  OR a.txn_ts IS NULL OR b.txn_ts IS NULL OR b.txn_ts <= a.txn_ts
+  OR b.txn_ts > a.txn_ts + INTERVAL '24' HOUR
+  OR element_at(s.gap_seconds, hop) <> date_diff('second', a.txn_ts, b.txn_ts)
+);
 
--- Expect zero under the proposed strictly-later, per-hop <=24h rule.
-SELECT a.dataset, a.sequence_id, a.hop_index
-FROM is459_g2t1_aml.bq2_sequence_transactions a
-JOIN is459_g2t1_aml.bq2_sequence_transactions b
-  ON b.dataset = a.dataset AND b.sequence_id = a.sequence_id AND b.hop_index = a.hop_index + 1
-JOIN is459_g2t1_aml.transactions_clean x ON x.dataset = a.dataset AND x.txn_id = a.txn_id
-JOIN is459_g2t1_aml.transactions_clean y ON y.dataset = b.dataset AND y.txn_id = b.txn_id
-WHERE a.dataset IN ('HI-Medium', 'LI-Medium')
-  AND (x.to_bank IS NULL OR x.to_account IS NULL OR y.from_bank IS NULL OR y.from_account IS NULL
-       OR x.to_bank <> y.from_bank OR x.to_account <> y.from_account
-       OR x.txn_ts IS NULL OR y.txn_ts IS NULL OR y.txn_ts <= x.txn_ts
-       OR y.txn_ts > x.txn_ts + INTERVAL '24' HOUR);
-
--- After CTAS: expect zero rows. Reconcile reviewed = flagged + legitimate.
+-- POST-CTAS only: expect zero. Do not add rows across length/support policy scopes.
 SELECT * FROM is459_g2t1_aml.bq2_tradeoff
 WHERE reviewed <> laundering_flagged + legitimate_reviewed
    OR laundering_flagged > total_laundering OR legitimate_reviewed > total_legitimate

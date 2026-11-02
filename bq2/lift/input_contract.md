@@ -1,81 +1,47 @@
-# Proposed Role 5 → Role 6 input contract
+# Role 6 input contract — aligned to Role 5 v1
 
-Status: **not confirmed or deployed**. If Ji Ning already has a different schema, adapt these inputs with an agreed mapping rather than rebuilding the sequence job.
+Status: Role 6 implementation is aligned to Ji Ning's documented 21-column interface. Actual catalog types, sample data and publication remain unverified. This is an interface-readiness statement, not a claim that Role 5 has deployed a builder or that a direct message has been sent.
 
-## Sample-first handoff for Ji Ning
+## Canonical interface
 
-Xiang Ying has verified the cleaned schema and full HI/LI counts. Ji Ning has not started the builder yet (team update, 2 Nov 2026). This document is the proposed interface, not a signed-off design. Publish the actual names/mapping here before connecting Role 6.
+Use [Role 5's 21-column schema](../sequences/schema_bq2_sequences.md) and [sequence rules](../sequences/sequence_rules.md) as the authoritative definitions. Do not maintain a second conflicting schema here.
 
-1. Confirm the decisions below before the first builder run.
-2. Deliver a small development batch first, for example 100–200 complete chains plus every constituent transaction ID. Include legitimate and positive chains where present, both 2- and 3-hop cases, a repeated payment method, and overlapping chains. Do not manufacture positive labels if the selected window has none: report that limitation.
-3. Share the development database/table names, schema, dataset values, S3 locations and one traced real chain with timestamps/bank-account links. Keep transaction/account-level data in team-controlled S3, not GitHub.
-4. Xiang Ying maps the interface and checks completeness, labels, hop order and duplicate handling. The existing SQLite fixtures can be used while this batch is being built.
-5. Only after the sample checks pass, run the same rules on full HI and LI. Report counts, date coverage and builder version for each. The 100–200 figure is a suggested test-batch size, not the minimum-support threshold.
-
-A handpicked batch is for technical verification only. Its laundering prevalence and ranks must not be presented as representative findings. Keep development outputs separate from production tables. The prepared final analytics excludes `dataset = 'sample'`; do not relabel sample data as full HI/LI just to make it run. Agree a development mapping before testing the sample with Athena.
-
-## Decisions awaiting Ji Ning/team confirmation
-
-| Decision | Role 6 proposed default | Approval status |
+| Purpose | Table | Required handling |
 |---|---|---|
-| Chain label | MAX of constituent `is_laundering` labels (any positive hop) | Pending |
-| 24h interpretation | Each consecutive hop strictly later and <=24h later | Pending |
-| Total chain duration | No additional <=24h total-duration limit under the proposed per-hop rule | Pending |
-| Equal timestamps | Exclude tied-time links because minute timestamps do not establish order | Pending |
-| Length/overlap | Build 2- and 3-transfer chains; allow overlaps, prohibit repeated txn within one chain; deduplicate exact ordered chains | Pending |
-| Bank/account link | Match both bank and account, identically on HI/LI | Pending |
-| Self-transfers/cycles/branching | Ji Ning documents explicit handling before the sample run | Pending |
-| Actual input names/schema | Tables below or a documented adapter over the builder's existing fields | Pending |
+| Full production occurrences | `is459_g2t1_aml.bq2_sequences` | `dataset` = HI-Medium or LI-Medium, evaluated separately by length |
+| Development batch | `is459_g2t1_aml.bq2_sequences_dev` | Preserve actual source dataset, initially sample; use only development destinations |
+| Original labels/denominators | `is459_g2t1_aml.transactions_clean` | Join on dataset AND bigint txn_id; full cleaned population denominators |
 
-Example of the window distinction: transfers at Monday 00:00, Monday 23:00 and Tuesday 22:00 meet a 24h-per-hop rule (23h gaps) but fail a 24h-total-chain rule (46h total). Pick one interpretation and apply it identically to HI/LI. `validation.sql` currently checks strictly later, per-hop <=24h and the MAX label. If the team selects different rules, update that validation and the explanatory copy together before execution.
+Sequence roots are `s3://is459-g2t1-aml-processed-bucket/bq2_sequences/` and `.../bq2_sequences_dev/`, partitioned by dataset/start_date. Ordered membership is `txn_ids array<bigint>`; no physical `bq2_sequence_transactions` table is required. Preserve signed bigint IDs exactly, including negative values; never convert through floating point.
 
-## Ready-to-share message
+## Fields Role 6 uses
 
-> Ji Ning, my Role 6 schema and HI/LI baseline checks are complete. Before you build the sequences, please review this proposed contract on main: bq2/lift/input_contract.md. Can we confirm the MAX/any-positive-hop label and strictly-later, <=24h-per-consecutive-hop rule (no extra whole-chain limit), plus overlap/tied-time handling? Please deliver a small development batch of complete chains with legitimate and positive examples where available, ordered methods, chain length/label and constituent transaction IDs before the full runs. An ID array is fine if we map it to membership. Please reply with your actual database/table names, schema and the agreed decisions; both full HI and LI must eventually use the same rules. The batch is for testing, not final findings.
+- Lift: `dataset`, `sequence_length`, `method_sequence`, `any_laundering`.
+- Targeting: same pattern/length plus `final_txn_id`. Read the original final label from clean; `final_is_laundering` is independently checked through the aligned label array.
+- Sankey: readable methods split on literal ` -> `; `payment_methods` is checked as their source representation.
+- Lineage: `sequence_id`, `rule_version`, `txn_ids`, `txn_timestamps`, `txn_laundering_labels`, gaps, duration and start_date.
+- Secondary currencies: explicit payment/receiving arrays and strings. No generic `currency_sequence` or generic chain `is_laundering` is expected.
 
-This message is prepared for Xiang Ying to share; no direct message has been sent and no agreement has been claimed. Record Ji Ning's reply below.
+No extra columns are needed for lift, distinct-final targeting, LI robustness or Sankey.
 
-- Confirmed by / date: pending.
-- Agreed rules or differences: pending.
-- Development table names and schema: pending.
-- Full HI/LI readiness: pending.
+## Rule alignment
 
-## `is459_g2t1_aml.bq2_sequences`
+2/3 transfers are separate analytical populations. Each adjacent transfer is strictly later and at most 24 hours later; tied times are excluded and triples can span up to 48h. Match both bank and account within one dataset. Retain all branches, same-bank transfers, repeated methods, cycles/self-transfers where the rules allow, and overlapping chains; prohibit repeated transactions within a chain and deduplicate exact ordered chains. No amount/currency equality is required.
 
-Parquet at `s3://is459-g2t1-aml-processed-bucket/bq2_sequences/`, partitioned by `dataset`.
+Use any positive hop for sequence lift, but the final transaction's original label for checks. For `[1,0]`, the chain is positive while its final transaction is legitimate. Do not require HI-only attempt metadata. Do not mix rule versions or refreshed source snapshots in one run.
 
-| Column | Athena type | Required meaning |
-|---|---|---|
-| dataset | varchar | `HI-Medium` or `LI-Medium`; `sample` is excluded from final SQL |
-| sequence_id | varchar | Stable unique ordered chain ID within dataset, based on transaction IDs, not labels |
-| method_sequence | varchar | Canonical methods separated by literal ` -> `, e.g. `Cash -> Wire -> Bitcoin` |
-| currency_sequence | varchar | Canonical ordered currency values under a documented rule; secondary analysis only |
-| sequence_length | integer | Number of transfers, 2 or 3, matching method tokens and membership rows |
-| is_laundering | integer | Proposed `MAX` of constituent transaction labels; confirm with team |
+## Sample-first acceptance
 
-One row per distinct ordered chain, including legitimate chains. Do not build only laundering chains or collapse all occurrences of a method pattern into one row.
+1. Ji Ning publishes development table/schema, complete ordered chains, source coverage, rule/builder version and successful-completion manifest. A suggested 100–200 complete chains is an interface-test size, not a support cutoff; the exact batch/window is agreed with Ji Ning.
+2. Include legitimate/mixed/positive chains, both lengths, repeated methods and overlapping finals where available; report missing cases instead of manufacturing labels. Confirm whether the batch is exhaustive or handpicked.
+3. Use an isolated development copy of SQL/validation: replace only sequence input with `bq2_sequences_dev`, source dataset filters with the actual value (e.g. sample), and ALL output names/references/S3 destinations with consistent `_dev` counterparts. The clean source remains `transactions_clean`, with the same sample dataset. Never relabel sample as HI or create development output in production prefixes. The HI-to-LI robustness query is not meaningful for a sample-only batch; skip it until both full datasets exist.
+4. Run the clean-source uniqueness check, sequence preflight, label/string/array, lineage and link validations. Inspect at least one traced real chain. Handpicked-batch ranks/prevalence are not findings; support cutoffs may yield no eligible patterns and must not be lowered to invent a winner.
+5. Only after sample acceptance and full publication: inspect HI frequencies without outcomes; evaluate 50/100/500 sensitivity; run full HI/LI analytics against the same validated source snapshot. Record actual schema, version and completion evidence before marking integration complete.
 
-## `is459_g2t1_aml.bq2_sequence_transactions`
+Still to verify: precise sequence-ID serialization/repeatability, input uniqueness/quality, upstream timestamp interpretation, growth limits, actual development batch, staged publication/recovery and synchronized HI/LI readiness. These are implementation acceptance checks, not new fields or permission to change another role's code.
 
-Proposed Parquet prefix `s3://is459-g2t1-aml-processed-bucket/bq2_sequence_transactions/`, partitioned by dataset. Membership enables distinct transaction trade-offs. An adapter over an existing transaction-ID array is sufficient.
+## Message Xiang Ying can send Ji Ning
 
-| Column | Athena type | Meaning |
-|---|---|---|
-| dataset | varchar | Same partition as chain and cleaned transaction |
-| sequence_id | varchar | Chain key |
-| hop_index | integer | 1-based transfer position |
-| txn_id | bigint | Exact `transactions_clean.txn_id` |
+> I reviewed v1: the 21 columns cover Role 6, and my SQL is now aligned to any_laundering, separate length/support rankings and distinct final_txn_id checks. No extra fields or physical membership table are needed. Please send the development table/schema, source coverage and successful publication manifest when ready; retain ordered bigint IDs and original labels. I'll validate the development batch before full-data analysis. Please fix/test the exact sequence-ID serialization and preserve the documented timestamp interpretation.
 
-One row per hop; unique `(dataset, sequence_id, hop_index)`. A transaction may occur in several chains. Join transaction IDs with dataset, never across HI/LI/sample.
-
-## Rules Ji Ning must document
-
-- Link incoming `(to_bank, to_account)` to outgoing `(from_bank, from_account)` using both fields.
-- Proposed window: each next transfer strictly later and at most 24 hours later. Clarify whether the whole chain must also fit 24 hours. Minute-resolution ties need a consistent policy; hashes do not establish time order.
-- No repeated transaction within a chain. Define self-transfers, cycles, branching and overlapping 2/3-hop subchains identically on HI/LI.
-- Define currency sequence (paid/received currency and FX within a hop). Do not fragment the primary payment-method ranking by currency.
-- Publish counts, date bounds, rejected rows, branch fan-out and follow-up-window policy. Dataset boundaries can truncate chains.
-- A linked chain is a candidate pathway, not proof the same funds moved. Under a MAX label, some constituent transactions may be legitimate.
-- Never require HI-only `attempt_id` for construction or labels; LI lacks it.
-
-Without membership, lift can proceed after chain checks pass, but transaction trade-offs must wait. Chain-level rates must be labelled as such and cannot substitute for the proposal's transaction chart.
+No direct message has been sent. Record Ji Ning's actual development-table mapping and verification outcome here when available.

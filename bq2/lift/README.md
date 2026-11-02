@@ -6,7 +6,7 @@ Owner: Xiang Ying. Status: cleaned schema and HI/LI baselines verified from Xian
 
 Ranks payment-method sequences by laundering lift, compares top-3/5/10 rules with reviewing all transactions, and evaluates frozen HI rules on LI-Medium. Outputs support the ranked table, Sankey, trade-off chart and targeted checklist promised on proposal pages 8–9.
 
-**Start with the [numbered walkthrough](start_now.md) and [five pre-Role-5 queries](start_now.sql).** The [Role 6 guide](role6_guide.md) explains the metric choices. Role 5 has no committed schema yet. [Input contract](input_contract.md) is a proposal for Ji Ning to confirm, not documentation of an existing table.
+**Start with the [numbered walkthrough](start_now.md) and [five pre-Role-5 queries](start_now.sql).** The [Role 6 guide](role6_guide.md) explains the metric choices. [Input contract](input_contract.md) maps Ji Ning's documented 21-column v1 schema to this implementation; the actual development output is still pending verification.
 
 ## AWS resources
 
@@ -17,7 +17,7 @@ Existing resources: region `us-east-1`, database `is459_g2t1_aml`, Athena workgr
 | File | Reads | Proposed output table / processed-bucket prefix |
 |---|---|---|
 | `bq2_lift.sql` | `bq2_sequences` | `bq2_lift` / `bq2_lift/` |
-| `tradeoff.sql` | lift, sequences, membership, `transactions_clean` | `bq2_tradeoff` / `bq2_tradeoff/` |
+| `tradeoff.sql` | lift, sequences (`final_txn_id`), `transactions_clean` | `bq2_tradeoff` / `bq2_tradeoff/` |
 | `robustness.sql` | lift | `bq2_robustness` / `bq2_robustness/` |
 | `sankey.sql` | lift | `bq2_sankey` / `bq2_sankey/` |
 
@@ -25,21 +25,18 @@ All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-
 
 ## Current progress
 
-- Completed locally: analytics SQL, eight synthetic checks, proposed Role 5 contract, Tableau build guide, and a numbered Athena walkthrough with five queries that do not depend on Role 5.
-- Completed in the team console: required schema confirmed from pasted results, one-day HI missing-USD check passed, full HI/LI counts reconciled, proposed input names checked. See [results](results.md) and [screenshots](screenshots/README.md).
-- Earlier CLI access failure was in a different personal account; it is not a blocker for the successful team-console session.
-- All five query-result screenshots are saved, including the corrected `01-cleaned-schema.png`. Query execution IDs remain unrecorded.
-- Handoff ready to share: [sample-first request and pending decision record](input_contract.md#sample-first-handoff-for-ji-ning). Ji Ning has not started the builder; no agreement or direct message is claimed.
-- Metric choices reviewed and documented: [decision table](role6_guide.md#metric-review-before-the-sample-handoff).
-- Tableau preparation complete as a [four-sheet layout specification](../../viz/bq2_tableau.md#four-sheet-layout-prepared-before-role-5); native workbook and populated charts remain pending.
-- Awaiting Role 5: agreed sequence schema/rules, development batch, then full labelled HI/LI chains with transaction membership.
-- Still pending: real sequence rankings/trade-offs, Tableau workbook/screenshots and end-to-end BQ2 execution.
+- Implemented: v1 interface alignment, separate dataset/length lift, 50/100/500 support policies, distinct-final targeting, frozen-rule LI checks and nonduplicated Sankey counts.
+- Eleven local analytical SQL regression tests pass; Athena array/lineage validation and actual integration are not yet executed.
+- Completed console evidence: schema, one-day HI missing-USD check and full HI/LI baselines, with [five screenshots](screenshots/README.md). Query IDs remain unrecorded. Earlier personal-account CLI failure does not describe team-console access.
+- [Handoff and development mapping](input_contract.md) ready to share; no direct message or deployed builder is claimed.
+- [Four-view Tableau plan](../../viz/bq2_tableau.md) prepared; native workbook and real charts remain pending.
+- Awaiting Role 5: successfully published development batch, source/manifest evidence, then full HI/LI outputs under the same v1 rules.
 
 ## How to run
 
-1. Confirm Ji Ning's contract and run the pre-CTAS statements of `validation.sql` separately (the last check runs after CTAS). Stop for failed checks.
+1. Inspect actual v1 catalog schema and publication evidence, then run the pre-CTAS statements of `validation.sql` separately (the last check runs after CTAS). Stop for failed checks.
 2. Use Athena engine 3 and the database/workgroup above. Confirm the workgroup permits CTAS with explicit `external_location`.
-3. Run `bq2_lift.sql`, then `tradeoff.sql`, `robustness.sql`, `sankey.sql`, one statement per execution. Each file contains one CTAS. `100` is a provisional minimum count, not a class requirement. Agree it before viewing rankings; sensitivity-check 50/100/500 in separate runs.
+3. First run `frequency.sql` and agree the primary cutoff from outcome-blind frequency evidence. Then run `bq2_lift.sql`, then `tradeoff.sql`, `robustness.sql`, `sankey.sql`, one statement per execution. Each file contains one CTAS. All three 50/100/500 support policies are produced together; choose the main cutoff from frequency evidence, not the best lift. Filter `min_support` and `sequence_length` when reading policy outputs.
 4. Inspect with explicit `ORDER BY`; Parquet has no guaranteed row order. Connect aggregate outputs to Tableau using [viz guide](../../viz/bq2_tableau.md).
 5. Record measured results and query IDs in `results.md`. Do not substitute proposal illustration numbers.
 
@@ -55,16 +52,18 @@ Local verification: `python3 -m unittest discover -s bq2/lift/tests -v`. Tests e
 | Exact SQL | One CTAS per file above, in that order |
 | Context | Database `is459_g2t1_aml`, workgroup `primary` |
 | Output | Four tables/prefixes above |
-| Depends on | Validated HI and LI sequences and membership; both cleaned partitions |
+| Depends on | Validated v1 HI/LI sequence occurrences and both cleaned partitions (no membership table) |
 | Runtime | Not measured; capture time and bytes scanned on real runs |
 
 After fetching current main, the checked-in state machine has live ETL/BQ1 tasks; BQ2 remains Pass placeholders. These files do not update the deployed state machine. Gate the branch on quality-check success; do not blindly retry CTAS against fixed prefixes. The existing `is459-g2t1-reset-outputs` Lambda is reusable for a coordinated refresh; ask Sonia to register only the four Role 6 destinations, preserving existing outputs. She must prevent concurrent writers and ensure both HI/LI inputs are ready. Alternatively use consistent per-run names/locations. Claim automation only after a real successful execution.
 
 ## Contribution summary
 
-Prepared Athena sequence lift, distinct-transaction targeting evaluation, frozen-rule LI robustness and Tableau aggregate inputs, with a Role 5 contract and synthetic SQL checks. Real-data execution, findings and Tableau workbook remain pending.
+Implemented v1-aligned sequence lift by length/support policy, distinct-final targeting, frozen-rule LI robustness and Tableau aggregate inputs, with lineage validation and eleven synthetic regression checks. Real-data execution, findings and Tableau workbook remain pending.
 
 ## Platform references
 
 - [AWS CTAS destination rules](https://docs.aws.amazon.com/athena/latest/ug/create-table-as.html)
 - [Athena integration in Step Functions](https://docs.aws.amazon.com/step-functions/latest/dg/connect-athena.html)
+
+Array validation references: [AWS UNNEST](https://docs.aws.amazon.com/athena/latest/ug/flattening-arrays.html), [array reductions](https://docs.aws.amazon.com/athena/latest/ug/arrays-and-aggregation.html), and [Athena SELECT / ordinality](https://docs.aws.amazon.com/athena/latest/ug/select.html). These references do not replace execution against the development table.

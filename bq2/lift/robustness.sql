@@ -5,7 +5,7 @@ WITH (
   format = 'PARQUET',
   external_location = 's3://is459-g2t1-aml-processed-bucket/bq2_robustness/'
 ) AS
-SELECT hi.method_sequence, hi.sequence_length, hi.risk_rank AS hi_rank,
+SELECT hi.method_sequence, hi.sequence_length, hi.min_support, hi.risk_rank AS hi_rank,
        hi.support_count AS hi_support, hi.lift AS hi_lift,
        COALESCE(li.support_count, 0) AS li_support,
        COALESCE(li.laundering_count, 0) AS li_laundering_count,
@@ -18,5 +18,5 @@ SELECT hi.method_sequence, hi.sequence_length, hi.risk_rank AS hi_rank,
 FROM is459_g2t1_aml.bq2_lift hi
 LEFT JOIN is459_g2t1_aml.bq2_lift li
   ON li.dataset = 'LI-Medium' AND li.method_sequence = hi.method_sequence
-     AND li.sequence_length = hi.sequence_length
+     AND li.sequence_length = hi.sequence_length AND li.min_support = hi.min_support
 WHERE hi.dataset = 'HI-Medium' AND hi.risk_rank <= 10;
