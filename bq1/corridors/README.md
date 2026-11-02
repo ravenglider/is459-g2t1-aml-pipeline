@@ -1,6 +1,6 @@
 # bq1/corridors: Bank-pair corridors
 
-**Owner:** Role 3 (name: ____________)
+**Owner:** Role 3 (name: Ryan Wu)
 
 Aggregates laundering activity by bank pair, computes the blindspot gap and extra laundering value, ranks corridors and produces the priority sharing list.
 
