@@ -17,3 +17,6 @@ __pycache__/
 .ipynb_checkpoints/
 .vscode/
 .idea/
+
+# Local Role 4 helpers: do not commit or push
+/bq1/neo4j/tools/
