@@ -11,6 +11,7 @@ from sequence_processing import _iso_date
 DATABASE = "is459_g2t1_aml"
 TABLE = "transactions_clean"
 SOURCE_ROOT = "s3://is459-g2t1-aml-processed-bucket/transactions_clean/"
+SAMPLE_DATES = tuple(f"2022-09-{day:02d}" for day in range(1, 7))
 
 
 def selected_dates(dataset, dates):
@@ -81,7 +82,113 @@ def read_catalog_selected(glue_context, dataset, dates, *, available_dates,
     frame = frame.select(*names)
     validate_cleaned_schema(frame)
     if frame.where(F.col("dataset").isNull() | F.col("txn_date").isNull()
-                   | (F.col("dataset") != dataset) | ~F.col("txn_date").isin(dates)).limit(1).count():
+                   | (F.col("dataset") != dataset) | ~F.col("txn_date").isin(list(dates))).limit(1).count():
         raise ValueError("Catalog result contains rows outside selected partitions")
     validate_transactions(frame)
     return frame
+
+
+def inspect_sample_source(catalog_client, s3_client):
+    """READ ONLY complete sample metadata snapshot; injected clients only.
+
+    No transaction scan. Pagination, exact partition locations and every sample
+    file are checked; metadata fingerprints detect changes, not snapshot locks.
+    """
+    from datetime import datetime, timezone
+    from sequence_manifest import _digest
+    from sequence_s3 import inventory_s3_objects, SOURCE
+    from sequence_source import fingerprint_source_inventory
+
+    table = catalog_client.get_table(DatabaseName=DATABASE, Name=TABLE)["Table"]
+    validate_catalog_table(table)
+    if "parquet" not in table.get("StorageDescriptor", {}).get("InputFormat", "").lower():
+        raise ValueError("transactions_clean must use a Parquet input format")
+    partitions, tokens, token = [], set(), None
+    while True:
+        args = dict(DatabaseName=DATABASE, TableName=TABLE, Expression="dataset = 'sample'")
+        if token is not None:
+            args["NextToken"] = token
+        response = catalog_client.get_partitions(**args)
+        partitions.extend(response.get("Partitions", []))
+        token = response.get("NextToken")
+        if token is None:
+            break
+        if not isinstance(token, str) or not token or token in tokens:
+            raise ValueError("Invalid sample Catalog pagination")
+        tokens.add(token)
+    days = []
+    for partition in partitions:
+        values = partition.get("Values")
+        if not isinstance(values, list) or len(values) != 2 or values[0] != "sample":
+            raise ValueError("Catalog returned a non-sample/malformed partition")
+        day = _iso_date(values[1], "partition date").isoformat()
+        expected = SOURCE + "txn_date=" + day + "/"
+        storage = partition.get("StorageDescriptor", {})
+        if storage.get("Location") != expected:
+            raise ValueError("Sample Catalog/S3 partition locations disagree")
+        validate_catalog_table(dict(table, StorageDescriptor=dict(storage, Location=SOURCE_ROOT)))
+        if "parquet" not in storage.get("InputFormat", "").lower():
+            raise ValueError("Sample partition is not Parquet")
+        days.append(day)
+    if sorted(days) != list(SAMPLE_DATES):
+        raise ValueError("Missing, duplicate or unexpected sample partitions")
+    objects = inventory_s3_objects(s3_client, SOURCE)
+    files, found = [], set()
+    for record in objects:
+        tail = record["path"][len(SOURCE):]
+        if tail == "_SUCCESS":
+            continue
+        pieces = tail.split("/")
+        if len(pieces) != 2 or not pieces[0].startswith("txn_date="):
+            raise ValueError("Unexpected sample S3 object layout")
+        day = pieces[0][len("txn_date="):]
+        if day not in SAMPLE_DATES or (not pieces[1].endswith(".parquet") and pieces[1] != "_SUCCESS"):
+            raise ValueError("Unexpected sample date/file artifact")
+        if pieces[1].endswith(".parquet"):
+            if record["size"] == 0:
+                raise ValueError("Empty sample Parquet object")
+            files.append(record["path"])
+            found.add(day)
+    if found != set(SAMPLE_DATES):
+        raise ValueError("Missing sample Parquet objects")
+
+    def serial(value):
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                raise ValueError("Catalog metadata datetime must be timezone-aware")
+            return value.astimezone(timezone.utc).isoformat()
+        if isinstance(value, dict):
+            return {key: serial(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [serial(item) for item in value]
+        return value
+    # Stable relevant metadata; do not fingerprint access-time counters.
+    table_record = {key: table[key] for key in ("Name", "StorageDescriptor", "PartitionKeys", "Parameters", "VersionId", "UpdateTime") if key in table}
+    partition_records = [{key: p[key] for key in ("Values", "StorageDescriptor", "Parameters", "CreationTime") if key in p}
+                         for p in sorted(partitions, key=lambda p: p["Values"])]
+    return dict(table=table, dates=list(SAMPLE_DATES), files=sorted(files), objects=objects,
+                source_fingerprint=fingerprint_source_inventory(objects),
+                table_fingerprint=_digest(serial(table_record)),
+                partitions_fingerprint=_digest(serial(partition_records)))
+
+
+def validate_sample_physical_schema(spark, files):
+    """Check each inventoried file's 18 physical names/types, without casting."""
+    from sequence_source import CLEANED_SCHEMA, _check_schema
+    from pyspark.sql.types import StructType
+    if not files or len(files) != len(set(files)):
+        raise ValueError("Explicit unique sample Parquet files required")
+    prefix = SOURCE_ROOT + "dataset=sample/"
+    for uri in files:
+        if not isinstance(uri, str) or not uri.startswith(prefix):
+            raise ValueError("Physical schema scan must be sample-only")
+        tail = uri[len(prefix):].split("/")
+        if (len(tail) != 2 or tail[0] not in ["txn_date=" + d for d in SAMPLE_DATES]
+                or not tail[1].endswith(".parquet") or any(c in uri for c in ("%", "\\", "?", "#"))):
+            raise ValueError("Unsafe sample file path")
+    session = spark.newSession()
+    session.conf.set("spark.sql.session.timeZone", "UTC")
+    physical = StructType(CLEANED_SCHEMA.fields[:-2])
+    for uri in files:
+        schema = session.read.option("recursiveFileLookup", "true").parquet(uri).schema
+        _check_schema(schema, physical)
