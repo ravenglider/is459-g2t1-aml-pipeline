@@ -10,7 +10,7 @@ Aggregates cross-bank laundering activity by bank pair, computes the Blindspot G
 |---|---|
 | `bq1_corridors.sql` | Athena queries building `bq1_direct_corridors`, `bq1_attempt_banks`, `bq1_shared_attempt_value`, `bq1_corridors_ranked` |
 | `metrics.md` | Exact formulas for Blindspot Gap and Extra Laundering Value, with a worked example |
-| `priority_list.sql` | Query producing the ranked priority sharing list (pending Le Xin's Neo4j findings) |
+| `priority_list.sql` | Query producing the ranked priority sharing list (pending Role 4's Neo4j findings) |
 | `results.md` | Top 10 corridors and key findings (numbers for the slides) |
 
 ## Notes for this role
