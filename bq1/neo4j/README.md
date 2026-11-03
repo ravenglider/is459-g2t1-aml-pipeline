@@ -1,79 +1,89 @@
-# BQ1 bank graph - Role 4
+# bq1/neo4j/ (Role 4: BQ1 graph)
 
-Loads retained labelled laundering transactions into Neo4j on the existing group EC2 instance. Bank routes, account/time-supported candidates, betweenness and Louvain add network context to Role 3's corridor ranking. This submission records the validated manual sample/HI workflow and HI feature join. Role 4 is not yet fully complete.
+Owner: Role 4
 
-## Validated source and records
+## What it does
 
-| File | Purpose |
-|---|---|
-| [ec2_setup.md](ec2_setup.md) | Shared EC2/Docker/Neo4j/GDS configuration, connection and recovery |
-| [validation.sql](validation.sql) | Input/schema, cutoff and graph-key checks; two-hop source verification |
-| [export_edges.sql](export_edges.sql) | HI bank/account CSV exports and source reconciliation |
-| [import.cypher](import.cypher) | Scoped constraints/imports and repeat-import reconciliation |
-| [queries.cypher](queries.cypher) | Paths, verified examples, betweenness, activity, Louvain and feature export |
-| [athena_handoff.sql](athena_handoff.sql) | Accepted feature-table registration, quality checks, Role 3 join and execution IDs |
-| [findings.md](findings.md) | Measured results, evidence links, interpretation and limitations |
-| [screenshots/](screenshots/) | Named evidence from manual setup and sample/HI runs |
+Builds a Neo4j graph from retained labelled laundering transactions in `transactions_clean`. Cypher identifies bank routes and account/time-supported path candidates; GDS betweenness identifies intermediaries and Louvain groups connected banks. The resulting features and evidence support Role 3's priority information-sharing list for BQ1.
 
-Personal walkthroughs, helper tools, CSV/Parquet data, coordination messages and proposed orchestration documents are excluded by `.gitignore`. Untested visualisation/robustness sources and the offline-tested runner are deliberately held for a later submission after live validation. No automated graph deployment is claimed.
+Files:
+
+- [ec2_setup.md](ec2_setup.md): shared EC2, Docker, Neo4j/GDS configuration and connection details
+- [validation.sql](validation.sql): source/schema, cutoff and graph-key checks
+- [export_edges.sql](export_edges.sql): bank-edge/account-transaction exports and source reconciliation
+- [import.cypher](import.cypher): scoped imports, constraints and repeat-import checks
+- [queries.cypher](queries.cypher): multi-hop candidates, verified examples, betweenness, Louvain and feature export
+- [athena_handoff.sql](athena_handoff.sql): feature-table registration, validation and Role 3 join
+- [findings.md](findings.md): measured HI results, evidence links and Athena query IDs
 
 ## AWS resources
 
-Region `us-east-1`, database `is459_g2t1_aml`, existing workgroup `primary` (verify live). Reuse `is459-g2t1-ingest`, instance `i-0125056b848e5634a`, temporarily resized to `t3.medium`, with role `is459-g2t1-ec2-s3-role`. Container `role4-neo4j` runs Neo4j 5.26.32 Community and GDS with persistent named volumes. Coordinate shared use and stop EC2 when idle. Credentials stay in the protected instance-local `.env`, never in Git.
+| Resource | Exact name / configuration |
+|---|---|
+| Region | `us-east-1` |
+| Existing EC2 | `is459-g2t1-ingest` / `i-0125056b848e5634a` |
+| Instance type | Temporarily resized to `t3.medium` for Neo4j/GDS |
+| IAM role | `is459-g2t1-ec2-s3-role` |
+| Verified role policies | `AmazonS3FullAccess`, `AmazonSSMManagedInstanceCore` |
+| Access | Systems Manager Session Manager; Neo4j ports restricted to the current public IP |
+| Docker container | `role4-neo4j` |
+| Database | Neo4j 5.26.32 Community with GDS; persistent Docker volumes |
+| Athena workgroup / database | `primary` / `is459_g2t1_aml` |
+| Accepted HI output table | `is459_g2t1_aml.bq1_graph_bank_features_hi01` |
+
+Reuse the group's instance. Stop it when idle after coordinating shared use. Passwords stay in the protected instance-local `.env`, never in Git. The existing S3/SSM policies do not establish the Athena/Glue permissions needed for future automation.
 
 ## Inputs and outputs
 
-| Item | Location |
+| | Table / file | S3 path |
+|---|---|---|
+| Reads | `is459_g2t1_aml.transactions_clean` | `s3://is459-g2t1-aml-processed-bucket/transactions_clean/` |
+| Reads for final join | `is459_g2t1_aml.bq1_corridors_ranked` | `s3://is459-g2t1-aml-processed-bucket/bq1_corridors_ranked/` |
+| Writes graph inputs | `bank_edges.csv`, `transactions.csv` | `s3://is459-g2t1-aml-processed-bucket/bq1_graph_edges/hi-01/` |
+| Writes bank features | `bank_features.csv`, registered as `bq1_graph_bank_features_hi01` | `s3://is459-g2t1-aml-processed-bucket/bq1_graph_results/hi-01/bank_features/` |
+
+Feature schema: `bank_id,betweenness,community_id`. Run identity is recorded in the prefix/table. Primary population: HI-Medium labelled laundering rows with `amount_paid_usd < 20000000`; bank edges additionally require `cross_bank=1`. Account evidence includes retained same-bank transfers and rows without attempt annotations. The cutoff affects counts and sums and is a team analysis convention, not a regulatory threshold.
+
+## How to run
+
+1. In **us-east-1**, connect to the existing EC2 through Session Manager and verify Neo4j/GDS as described in [ec2_setup.md](ec2_setup.md). Preserve existing credentials and volumes.
+2. In Athena, database `is459_g2t1_aml`, run `validation.sql` statements separately. Investigate missing keys or duplicate transaction IDs before loading.
+3. Run the SELECTs in `export_edges.sql` separately. Download complete results, reconcile counts/USD, and upload the CSVs into the correct S3 run prefix.
+4. Copy the files to EC2's dedicated import directory. For HI, the container URLs are `file:///hi-01/bank_edges.csv` and `file:///hi-01/transactions.csv`.
+5. In Neo4j Browser, set `:param scope => 'hi-01'`, then run `import.cypher` statements separately. Repeat the two imports and confirm counts/USD remain unchanged.
+6. Run the relevant sections of `queries.cypher` separately. Check active scope and memory estimates before GDS writes; verify account/time candidates against Athena source records.
+7. Export every bank's features. Increase Browser's record limit above the graph size, rerun the query and download. Accepted HI export: **5,159 data rows plus header**, not the initial truncated 5,000 rows.
+8. Upload `bank_features.csv`, then run `athena_handoff.sql` statements separately. Verify unique/complete features and unchanged Role 3 join counts. Keep missing graph features as NULL, not zero risk.
+
+Use a new prefix/scope when inputs change; do not overwrite accepted runs or mix datasets. Bank identity is `(scope,bank_id)`; account identity is `(scope,bank_id,account_id)`. GDS projections must be rebuilt after active-scope changes. Algorithm reruns may change community labels, so export accepted results first.
+
+Betweenness is directed and unweighted. Primary Louvain uses undirected pairs weighted by combined transaction counts. A bank route alone does not establish account continuity; account/time-supported candidates still do not prove the same funds moved. Community IDs are categories, not risk scores or stable labels across reruns.
+
+## Step Functions info for Sonia
+
+| Field | Value / status |
 |---|---|
-| Source | `is459_g2t1_aml.transactions_clean` |
-| Accepted HI inputs | `s3://is459-g2t1-aml-processed-bucket/bq1_graph_edges/hi-01/` |
-| Accepted feature CSV | `s3://is459-g2t1-aml-processed-bucket/bq1_graph_results/hi-01/bank_features/bank_features.csv` |
-| Accepted feature table | `is459_g2t1_aml.bq1_graph_bank_features_hi01` |
-| Role 3 join input | `is459_g2t1_aml.bq1_corridors_ranked` |
+| Job type | Neo4j import/analysis on existing EC2; future invocation through SSM |
+| Manual sources | `export_edges.sql`, `import.cypher`, `queries.cypher`, `athena_handoff.sql` |
+| Tested automated command | Pending EC2/SSM trial; runner remains a local draft |
+| Target | `i-0125056b848e5634a`, container `role4-neo4j` |
+| Accepted output table | `is459_g2t1_aml.bq1_graph_bank_features_hi01` |
+| Accepted output S3 path | `s3://is459-g2t1-aml-processed-bucket/bq1_graph_results/hi-01/bank_features/` |
+| Depends on | Accepted `transactions_clean` snapshot and ready Neo4j/GDS; Role 3 corridor table is needed for the later join |
+| Typical full automated runtime | Not measured; manual query times are not end-to-end runtime |
+| Required success checks | Reconciled input/import totals, complete unique features, accepted run identity, terminal SSM success and zero response code |
+| Failure handling | Bound polling/timeouts, propagate failures, prevent concurrent scope changes and stale-output consumption |
 
-Feature CSV: `bank_id,betweenness,community_id` (three columns). Run identity is in the prefix/table. Primary input population: HI-Medium labelled laundering rows below $20M; bank graph additionally requires `cross_bank=1`. Account evidence includes retained same-bank rows and missing attempt annotations. The cutoff affects counts and sums and is a team analysis convention, not a regulatory threshold.
+The shared `BQ1_Neo4jLoad` remains a placeholder until the orchestration owner integrates and tests it. Confirm required IAM permissions and EC2 start/readiness/stop ownership before automation. Personal coordination drafts and proposed orchestration documents stay local.
 
-## How to run the manual workflow
+## Contribution summary (for the Week 13 slide)
 
-1. Read `ec2_setup.md` for existing server access/configuration. Do not recreate credentials or rerun ingestion merely to inspect the graph.
-2. Run the input checks in `validation.sql` separately in Athena. Investigate missing keys/duplicate transaction IDs before import.
-3. Run each SELECT in `export_edges.sql` separately, download full CSV results and upload into a distinct run prefix. Preserve the source snapshot, query IDs and counts.
-4. Copy CSVs to the dedicated EC2 import directory. For accepted HI, use `file:///hi-01/bank_edges.csv` and `file:///hi-01/transactions.csv`. In Browser set `:param scope => 'hi-01'`, then run `import.cypher` statements individually. Changed inputs require a new scope and matching file paths; never mix populations.
-5. Reconcile source/import counts and USD, repeat the two imports and confirm totals stay unchanged. Run `queries.cypher` sections individually, checking the active scope and memory estimates before GDS writes. Re-running algorithms may change community labels; preserve accepted results first.
-6. Export all bank features. Raise Browser's result limit above the graph size before rerunning/exporting; the accepted HI file contains 5,159 data rows plus header. CSVs remain in S3, not GitHub.
-7. Run `athena_handoff.sql` statements individually. Confirm unique/complete bank features and unchanged corridor join count. Do not modify Role 3 ranking weights or invent transfer edges from shared-attempt pairs.
+Validated sample and HI graph imports, account/time-supported multi-hop candidates, intermediary-bank scores, Louvain communities and the Role 3 Athena feature join. Saved reproducible SQL/Cypher, server configuration, findings and screenshot evidence.
 
-## Graph model and assumptions
+Results: HI contains **5,159 bank nodes**, **29,374 directed corridors**, **34,552 represented cross-bank transactions** ($2,308,523,888.96) and **34,891 account transfers** ($2,311,266,994.08). All banks have community assignments across **113 communities**; the feature join preserves **1,697,382 corridor rows**. Full results and limitations are in [findings.md](findings.md).
 
-- Bank identity: `(scope,bank_id)`; account identity: `(scope,bank_id,account_id)`.
-- `LAUNDERING_TO`: directed bank-pair count and USD; `TRANSFER`: source transaction with signed string ID, local timestamp, USD and optional attempt annotation.
-- `BANK_LINK`: one unordered pair weighted by combined retained transaction counts. Primary Louvain uses this undirected weight; betweenness is directed and unweighted.
-- Active labels select one run; GDS projections must be rebuilt after scope changes.
-- Account candidates use matching intermediary accounts and strictly increasing time, at most 24 hours per link. They do not prove identical funds or one common annotated attempt.
-- Community IDs are categories, not risk scores or stable labels across reruns. Missing graph features are not zero-risk evidence.
+Sample development checks also passed: 42 bank nodes, 35 corridors/transfers and $434,634.33 reconciled; repeated imports did not change totals. Sample Louvain produced eight communities; sample findings are not substituted for HI results.
 
-## Pipeline interface
+Remaining: Bloom access/agreed fallback and final scenes; LI/cutoff/weighting robustness; final recommendations for Role 3; live runner/SSM/integration checks and measured runtime; final team presentation/video artefacts. Prepared drafts are not executed results and remain outside the validated GitHub submission.
 
-| Field | Current value/status |
-|---|---|
-| Job type | Manual Athena exports plus Neo4j import/analysis; future EC2/SSM runner pending live validation |
-| Exact sources | `export_edges.sql`, `import.cypher`, `queries.cypher`, `athena_handoff.sql` |
-| Existing target | `i-0125056b848e5634a`, container `role4-neo4j` |
-| Output | Accepted feature table and S3 prefix above |
-| Depends on | Accepted `transactions_clean` snapshot and ready Neo4j/GDS; Role 3 corridor table for the join |
-| Full automated runtime | Not measured; no tested production import command published yet |
-| Future completion checks | Source/import reconciliation, unique complete features, accepted run identity, terminal SSM success and bounded failure propagation |
-
-The ingestion handoff requests the tested import/job command, output table/path and dependencies when the job is ready. Personal coordination drafts remain local. The group's `BQ1_Neo4jLoad` placeholder is not replaced by this commit; live runner/SSM trials and lifecycle handling remain to complete.
-
-## Accepted results and remaining work
-
-Sample smoke test: 42 bank nodes, 35 directed corridors and 35 account transfers; source/import totals $434,634.33 and unchanged repeated imports. Sample Louvain: eight communities, modularity 0.7102040816326531. Sample top betweenness ties of 55.0 are consistent with its observed 12-bank structural cycle; these are development findings.
-
-HI: 29,374 corridors; 34,552 represented cross-bank transactions / $2,308,523,888.96; 34,891 account transfers / $2,311,266,994.08. Features cover 5,159 unique banks and 113 communities. The Role 3 LEFT JOIN preserves all 1,697,382 rows. Detailed evidence and query IDs are in `findings.md`.
-
-Remaining: Bloom entitlement or agreed fallback and three final scenes; LI/cutoff/weighting sensitivity; final intermediary/cluster recommendations for Role 3; live runner/SSM/integrated execution and measured runtime; final team architecture, narrated setup/run videos and presentation artefacts. Add actual generated outputs when completed, not empty placeholders.
-
-## Contribution summary
-
-Role 4 validated sample/HI graph imports, multi-hop candidates, intermediary scores, communities and the Role 3 feature join. The source and findings preserve the manual analysis and its limits; final visualisation, robustness and deployed automation remain in progress.
+Evidence screenshots: [screenshots/](screenshots/) (linked to findings in [findings.md](findings.md)). Personal walkthroughs, tools, coordination notes, data exports and credentials remain gitignored.

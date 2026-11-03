@@ -78,7 +78,7 @@ Ryan's shared-attempt values require annotations; direct values do not. Full att
 
 Other execution IDs were not supplied here; do not infer them from transaction IDs. Source SQL: [exports](export_edges.sql) and [feature registration, checks and join](athena_handoff.sql). All observations are from the manual run and local screenshots; the SQL files consolidate those statements and have not been executed as an automated pipeline.
 
-Automation implementation/status: [pipeline interface](README.md#pipeline-interface). Offline tests pass; no deployed automation success is claimed.
+Automation implementation/status: [pipeline interface](README.md#step-functions-info-for-sonia). Offline tests pass; no deployed automation success is claimed.
 
 ### Measurements still to add
 
