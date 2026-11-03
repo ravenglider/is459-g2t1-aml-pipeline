@@ -7,7 +7,7 @@ import zipfile
 
 MODULES = ("bq2_sequence_builder.py", "sequence_processing.py", "sequence_source.py",
            "sequence_batch.py", "sequence_staging.py", "sequence_manifest.py", "sequence_aws.py",
-           "sequence_s3.py")
+           "sequence_s3.py", "glue_sample_preflight.py")
 
 
 def build_package(destination):

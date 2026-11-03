@@ -51,7 +51,7 @@ class Block(importlib.abc.MetaPathFinder):
             raise AssertionError('Forbidden import: ' + fullname)
 sys.meta_path.insert(0, Block())
 sys.path.insert(0, sys.argv[1])
-import glue_sequence_job, sequence_aws, sequence_s3, package_glue_modules
+import glue_sequence_job, glue_sample_preflight, sequence_aws, sequence_s3, package_glue_modules
 '''
         result = subprocess.run([sys.executable, "-I", "-c", script, str(ROOT)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -172,6 +172,7 @@ class PackagingTests(unittest.TestCase):
             with zipfile.ZipFile(first) as archive:
                 self.assertEqual(archive.namelist(), sorted(MODULES))
                 self.assertIn("sequence_s3.py", archive.namelist())
+                self.assertIn("glue_sample_preflight.py", archive.namelist())
                 self.assertTrue(all("/" not in name and name.endswith(".py") for name in archive.namelist()))
             with self.assertRaises(FileExistsError):
                 build_package(first)
