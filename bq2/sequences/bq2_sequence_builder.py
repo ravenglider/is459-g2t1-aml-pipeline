@@ -64,22 +64,39 @@ def validate_transactions(transactions: DataFrame) -> None:
         raise ValueError("Invalid required transaction fields: " + ", ".join(failed))
 
 
-def build_two_hop_links(transactions: DataFrame) -> DataFrame:
+def _timestamp_bucket(column):
+    """Fixed elapsed 24-hour bucket; decimal division avoids floating point."""
+    return F.floor(column.cast("bigint").cast("decimal(20,0)") / F.lit(86400)).cast("bigint")
+
+
+def build_two_hop_links(transactions: DataFrame, *, first_dates=None) -> DataFrame:
     """Return distinct dataset/first_txn_id/second_txn_id links.
 
     Validates required source fields before joining. This function
     neither starts Spark nor reads or writes any external data.
+    first_dates optionally restricts preceding transactions only; later receivers
+    remain available. Omission preserves the original unrestricted behavior.
     """
     validate_transactions(transactions)
     columns = ["dataset", "txn_id", "txn_ts", "from_bank", "from_account",
                "to_bank", "to_account"]
-    a = transactions.select(*columns).alias("a")
-    b = transactions.select(*columns).alias("b")
+    source = transactions.select(*columns).withColumn("_bucket", _timestamp_bucket(F.col("txn_ts")))
+    preceding = source
+    if first_dates is not None:
+        from sequence_processing import _iso_date
+        if isinstance(first_dates, (str, bytes)):
+            raise ValueError("first_dates must be an iterable of date strings")
+        dates = [_iso_date(d, "first_dates").isoformat() for d in first_dates]
+        preceding = source.where(F.date_format("txn_ts", "yyyy-MM-dd").isin(dates))
+    a = preceding.alias("a")
+    b = source.alias("b")
     condition = (
         (F.col("a.dataset") == F.col("b.dataset"))
         & (F.col("a.to_bank") == F.col("b.from_bank"))
         & (F.col("a.to_account") == F.col("b.from_account"))
         & (F.col("a.txn_id") != F.col("b.txn_id"))
+        & ((F.col("b._bucket") == F.col("a._bucket"))
+           | (F.col("b._bucket") == F.col("a._bucket") + 1))
         & (F.col("b.txn_ts") > F.col("a.txn_ts"))
         & (F.col("b.txn_ts") <= F.col("a.txn_ts") + F.expr("INTERVAL 24 HOURS"))
     )
@@ -90,18 +107,22 @@ def build_two_hop_links(transactions: DataFrame) -> DataFrame:
             .dropDuplicates(["dataset", "first_txn_id", "second_txn_id"]))
 
 
-def build_three_hop_links(two_hop_links: DataFrame) -> DataFrame:
+def build_three_hop_links(two_hop_links: DataFrame, *, starting_links=None) -> DataFrame:
     """Extend validated A->B and B->C links into distinct A->B->C triples.
 
     Input must come from the same validated transaction population. ID pairs
     alone cannot establish account/time validity; those checks belong upstream.
     This transformation performs no actions, source validation or caching.
+    starting_links optionally restricts the left-hand pairs before expansion;
+    it must be a subset of the same unique, validated chronological input links.
     """
     required = {"dataset": StringType(), "first_txn_id": LongType(),
                 "second_txn_id": LongType()}
     _require_columns(two_hop_links, required)
 
-    left = two_hop_links.select(*required).alias("left")
+    if starting_links is not None:
+        _require_columns(starting_links, required)
+    left = (two_hop_links if starting_links is None else starting_links).select(*required).alias("left")
     right = two_hop_links.select(*required).alias("right")
     condition = (
         (F.col("left.dataset") == F.col("right.dataset"))
