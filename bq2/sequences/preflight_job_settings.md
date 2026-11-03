@@ -46,9 +46,20 @@ Required arguments:
 
 `--DATASET` defaults to `sample` and rejects all other values. `--REGION` defaults
 to `us-east-1` and rejects all other values. `--JOB_NAME` must match the dedicated
-name. Without `--allow-aws-reads`, the CLI validates these local arguments and
-exits without importing AWS/Glue runtimes. Add that flag ONLY for a separately
-approved actual run. Unknown custom arguments are rejected. If Glue injects an
+name. For an approved Glue Console run, enter key `--ALLOW_AWS_READS` with value
+`true` (equivalent to `--ALLOW_AWS_READS=true` on the CLI). Missing or `false`
+activation stays offline: output explicitly says `NOT_RUN` and
+`preflight_completed=false`. If `--JOB_NAME`, `--JOB_RUN_ID` or `--JOB_ID` is supplied, offline
+validation exits with code **2**, preventing a misleading green Glue run. Local
+offline validation without those injected arguments retains exit code zero.
+
+Only lowercase literal `true` enables reads; malformed/valueless or duplicate
+activation arguments fail parsing. The old `--allow-aws-reads` spelling remains
+an alias but now also requires an explicit `true`/`false` value. Never supply
+both spellings. Duplicate Role 5 configuration values and abbreviated argument
+names are rejected. Known Glue engine arguments are allowlisted; known boolean
+engine flags support presence or explicit true/false and repeated `--conf` is
+allowed. Unknown custom arguments are rejected. If Glue injects an
 unsupported engine argument, inspect it and update the allowlist locally; do not
 silently ignore all unknown arguments.
 

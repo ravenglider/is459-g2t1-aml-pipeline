@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import types
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +23,12 @@ def config():
         timezone="UTC", timezone_evidence="Synthetic Amareet UTC parsing confirmation",
         no_refresh_acknowledged=True, no_refresh_evidence="Synthetic coordinated refresh pause",
         builder_fingerprint="a" * 64)
+
+
+def cli_args():
+    return ["--EXPECTED_ACCOUNT_ID", config()["account_id"], "--RUN_ID", "test",
+            "--TIMEZONE_EVIDENCE", "synthetic", "--NO_REFRESH_EVIDENCE", "synthetic",
+            "--NO_REFRESH_ACKNOWLEDGED", "true", "--BUILDER_FINGERPRINT", "a" * 64]
 
 
 class FakeCatalog:
@@ -159,14 +166,85 @@ import glue_sample_preflight
         untouched.newSession.assert_not_called()
 
     def test_offline_cli_has_no_implicit_runtime_and_rejects_unknown_arguments(self):
-        args = ["--EXPECTED_ACCOUNT_ID", config()["account_id"], "--RUN_ID", "test",
-                "--TIMEZONE_EVIDENCE", "synthetic", "--NO_REFRESH_EVIDENCE", "synthetic",
-                "--NO_REFRESH_ACKNOWLEDGED", "true", "--BUILDER_FINGERPRINT", "a" * 64]
+        args = cli_args()
         with patch("sys.stdout", new_callable=io.StringIO) as output:
             self.assertEqual(preflight.main(args), 0)
             self.assertFalse(json.loads(output.getvalue())["aws_reads_enabled"])
         with patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit):
             preflight.parse_arguments(args + ["--GENERATE_SEQUENCES", "true"])
+
+    def test_explicit_activation_formats_alias_and_duplicate_rejection(self):
+        self.assertEqual(preflight.parse_arguments(cli_args()).ALLOW_AWS_READS, "false")
+        for extra in (["--ALLOW_AWS_READS=true"], ["--ALLOW_AWS_READS", "true"],
+                      ["--allow-aws-reads", "true"]):
+            with self.subTest(extra=extra):
+                self.assertEqual(preflight.parse_arguments(cli_args() + extra).ALLOW_AWS_READS, "true")
+        bad = [["--ALLOW_AWS_READS"], ["--allow-aws-reads"], ["--ALLOW_AWS_READS="],
+               ["--ALLOW_AWS_READS", "TRUE"], ["--ALLOW_AWS_READS", "1"],
+               ["--ALLOW_AWS_READS", "yes"], ["--ALLOW_AWS_R=true"],
+               ["--ALLOW_AWS_READS=true", "--ALLOW_AWS_READS=false"],
+               ["--ALLOW_AWS_READS=true", "--ALLOW_AWS_READS=true"],
+               ["--allow-aws-reads", "true", "--ALLOW_AWS_READS", "false"],
+               ["--DATASET", "sample", "--DATASET", "HI-Medium"]]
+        for extra in bad:
+            with self.subTest(extra=extra), patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit) as caught:
+                preflight.parse_arguments(cli_args() + extra)
+            self.assertEqual(caught.exception.code, 2)
+
+    def test_exact_glue_console_shape_and_allowlisted_engine_arguments(self):
+        args = preflight.parse_arguments(cli_args() + [
+            "--ALLOW_AWS_READS", "true", "--JOB_NAME", preflight.JOB_NAME, "--JOB_RUN_ID", "jr_fake",
+            "--JOB_ID", "job_fake", "--TempDir", "s3://not-accessed/temp/",
+            "--extra-py-files", "s3://not-accessed/modules.zip", "--job-bookmark-option", "job-bookmark-disable",
+            "--job-language", "python", "--enable-metrics", "--enable-job-insights", "true",
+            "--enable-observability-metrics", "false", "--conf", "spark.a=b", "--conf", "spark.c=d"])
+        self.assertEqual(args.ALLOW_AWS_READS, "true")
+        self.assertEqual(args.JOB_NAME, preflight.JOB_NAME)
+        self.assertEqual(args.enable_metrics, "true")
+        self.assertEqual(args.conf, ["spark.a=b", "spark.c=d"])
+        for extra in (["--ROLE5_UNKNOWN", "value"], ["--DATASE", "sample"],
+                      ["--JOB_NAME", preflight.JOB_NAME, "--JOB_NAME", preflight.JOB_NAME]):
+            with patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit):
+                preflight.parse_arguments(cli_args() + extra)
+
+    def test_missing_or_false_activation_never_reports_success_or_initializes_sdk(self):
+        sdk = MagicMock()
+        for activation in ([], ["--ALLOW_AWS_READS=false"], ["--allow-aws-reads", "false"]):
+            for injected in ([], ["--JOB_NAME", preflight.JOB_NAME], ["--JOB_RUN_ID", "jr_fake"], ["--JOB_ID", "job_fake"]):
+                with self.subTest(activation=activation, injected=injected), patch.dict(sys.modules, {"boto3": sdk}), patch(
+                        "sys.stdout", new_callable=io.StringIO) as output:
+                    self.assertEqual(preflight.main(cli_args() + activation + injected), 2 if injected else 0)
+                    report = json.loads(output.getvalue())
+                    self.assertEqual(report["status"], "NOT_RUN")
+                    self.assertFalse(report["preflight_completed"])
+                    self.assertFalse(report["aws_reads_enabled"])
+                    self.assertNotIn("PREFLIGHT |", output.getvalue())
+        sdk.Session.assert_not_called()
+
+    def test_explicit_true_runtime_is_mocked_and_account_checked_before_spark(self):
+        sdk, identity, context_type, context, job_type, runtime_job, spark_type = [MagicMock() for _ in range(7)]
+        sdk.Session.return_value.client.side_effect = lambda name: identity if name == "sts" else MagicMock()
+        identity.get_caller_identity.return_value = dict(Account=config()["account_id"])
+        context_type.return_value = context
+        job_type.return_value = runtime_job
+        modules = {"boto3": sdk, "awsglue": types.ModuleType("awsglue"),
+                   "awsglue.context": types.SimpleNamespace(GlueContext=context_type),
+                   "awsglue.job": types.SimpleNamespace(Job=job_type),
+                   "pyspark.context": types.SimpleNamespace(SparkContext=spark_type)}
+        argv = cli_args() + ["--JOB_NAME", preflight.JOB_NAME, "--ALLOW_AWS_READS=true"]
+        with patch.dict(sys.modules, modules), patch.object(preflight, "run_preflight", return_value={"status": "VALIDATED_READ_ONLY"}) as run, patch(
+                "sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(preflight.main(argv), 0)
+            sdk.Session.assert_called_once_with(region_name="us-east-1")
+            self.assertEqual(run.call_args.args[0]["dataset"], "sample")
+            self.assertIn("PREFLIGHT |", output.getvalue())
+            runtime_job.init.assert_called_once_with(preflight.JOB_NAME, {"JOB_NAME": preflight.JOB_NAME, "DATASET": "sample"})
+            runtime_job.commit.assert_called_once()
+            context_type.reset_mock()
+            identity.get_caller_identity.return_value = dict(Account="999999999999")
+            with self.assertRaisesRegex(ValueError, "Wrong AWS account"):
+                preflight.main(argv)
+            context_type.assert_not_called()
 
 
 class PreflightOrchestrationTests(unittest.TestCase):

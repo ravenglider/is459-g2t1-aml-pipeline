@@ -1,6 +1,6 @@
 """Sample-only READ validation/profile entry point; NEVER writes S3 or sequences.
 
-Imports are inert. main requires --allow-aws-reads before SDK/runtime creation.
+Imports are inert. main requires --ALLOW_AWS_READS=true before SDK/runtime creation.
 Report destinations are DESIGN ONLY: evidence is returned/printed, storage stays
 disabled. Glue/CloudWatch may themselves store logs/temp artifacts in a real run.
 No existing builder execution gate is weakened to bootstrap source validation.
@@ -164,24 +164,38 @@ def run_preflight(config, *, glue_context, catalog_client, s3_client, identity_c
     return report
 
 
+class _SingleValue(argparse.Action):
+    """Reject duplicate safety/config values, including mixed activation aliases."""
+    def __call__(self, parser, namespace, values, option_string=None):
+        provided = getattr(namespace, "_provided_options", set())
+        if self.dest in provided:
+            parser.error("duplicate argument: " + option_string)
+        provided.add(self.dest)
+        namespace._provided_options = provided
+        setattr(namespace, self.dest, values)
+
+
 def parse_arguments(argv=None):
-    parser = argparse.ArgumentParser(description="Sample preflight; explicit opt-in required for any AWS reads")
-    parser.add_argument("--EXPECTED_ACCOUNT_ID", required=True)
-    parser.add_argument("--RUN_ID", required=True)
-    parser.add_argument("--TIMEZONE_EVIDENCE", required=True)
-    parser.add_argument("--NO_REFRESH_EVIDENCE", required=True)
-    parser.add_argument("--NO_REFRESH_ACKNOWLEDGED", choices=("true", "false"), required=True)
-    parser.add_argument("--BUILDER_FINGERPRINT", required=True)
-    parser.add_argument("--DATASET", default="sample")
-    parser.add_argument("--REGION", default=REGION)
-    parser.add_argument("--JOB_NAME", default=JOB_NAME)
-    parser.add_argument("--allow-aws-reads", action="store_true")
+    parser = argparse.ArgumentParser(description="Sample preflight; explicit opt-in required for any AWS reads",
+                                     allow_abbrev=False)
+    for name in ("EXPECTED_ACCOUNT_ID", "RUN_ID", "TIMEZONE_EVIDENCE", "NO_REFRESH_EVIDENCE", "BUILDER_FINGERPRINT"):
+        parser.add_argument("--" + name, required=True, action=_SingleValue)
+    parser.add_argument("--NO_REFRESH_ACKNOWLEDGED", choices=("true", "false"), required=True, action=_SingleValue)
+    parser.add_argument("--DATASET", default="sample", action=_SingleValue)
+    parser.add_argument("--REGION", default=REGION, action=_SingleValue)
+    parser.add_argument("--JOB_NAME", default=JOB_NAME, action=_SingleValue)
+    # Keep the previous spelling as an alias, but NEVER accept valueless activation.
+    parser.add_argument("--ALLOW_AWS_READS", "--allow-aws-reads", dest="ALLOW_AWS_READS",
+                        choices=("true", "false"), default="false", action=_SingleValue)
     # Glue may supply standard engine arguments. Only these known options are
     # tolerated; misspelled/custom unsafe arguments never silently disappear.
-    for name in ("JOB_RUN_ID", "TempDir", "extra-py-files", "job-bookmark-option",
-                 "enable-metrics", "enable-continuous-cloudwatch-log", "enable-job-insights",
-                 "job-language", "spark-event-logs-path", "conf", "scriptLocation"):
+    for name in ("JOB_ID", "JOB_RUN_ID", "SECURITY_CONFIGURATION", "TempDir", "extra-py-files", "job-bookmark-option",
+                 "job-language", "spark-event-logs-path", "scriptLocation", "endpoint", "mode"):
         parser.add_argument("--" + name)
+    for name in ("enable-metrics", "enable-continuous-cloudwatch-log", "enable-job-insights",
+                 "enable-observability-metrics", "enable-spark-ui"):
+        parser.add_argument("--" + name, nargs="?", const="true", choices=("true", "false"))
+    parser.add_argument("--conf", action="append")  # Spark legitimately accepts repeated configurations.
     return parser.parse_args(argv)
 
 
@@ -194,9 +208,14 @@ def main(argv=None):
     validate_config(config)
     if args.JOB_NAME != JOB_NAME:
         raise ValueError("Unexpected dedicated preflight job name")
-    if not args.allow_aws_reads:
-        print(json.dumps(dict(mode="OFFLINE_CONFIG_VALIDATION", aws_reads_enabled=False, report_storage_enabled=False)))
-        return 0
+    if args.ALLOW_AWS_READS != "true":
+        print(json.dumps(dict(mode="OFFLINE_CONFIG_VALIDATION", status="NOT_RUN", preflight_completed=False,
+                              aws_reads_enabled=False, report_storage_enabled=False)))
+        # Local validation stays backward-compatible. A Glue-shaped invocation
+        # must fail rather than leave a green job that never validated any data.
+        glue_invocation = ("JOB_NAME" in getattr(args, "_provided_options", set())
+                           or args.JOB_RUN_ID is not None or args.JOB_ID is not None)
+        return 2 if glue_invocation else 0
     # Never reached by local tests: runtime construction is explicit opt-in.
     import boto3
     from awsglue.context import GlueContext
