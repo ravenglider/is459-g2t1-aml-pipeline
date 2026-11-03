@@ -116,7 +116,7 @@ RETURN name;
 
 The configured heap is 1 GiB and container cap 2.5 GiB; host free RAM is not all usable GDS heap. Inspect graph/algorithm estimates before running. The Python runner additionally limits algorithm estimates to a configurable budget but does not replace live capacity checks.
 
-Bloom availability is separate from GDS installation. Remote Bloom entitlement and the three final visual scenes are pending; any Browser substitution needs team agreement.
+On 3 November 2026 the team approved Neo4j Browser instead of Bloom for the final visuals, as reported by the user. Use the existing Browser connection; no Bloom installation/licence is needed for the agreed route. The three final scenes/captions remain pending. Record the proposal-tool change in the report/slides.
 
 ## Evidence and stopping
 

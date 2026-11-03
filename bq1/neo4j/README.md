@@ -1,6 +1,6 @@
 # bq1/neo4j/ (Role 4: BQ1 graph)
 
-Owner: Role 4
+Owner: Le Xin
 
 ## What it does
 
@@ -14,7 +14,9 @@ Files:
 - [import.cypher](import.cypher): scoped imports, constraints and repeat-import checks
 - [queries.cypher](queries.cypher): multi-hop candidates, verified examples, betweenness, Louvain and feature export
 - [athena_handoff.sql](athena_handoff.sql): feature-table registration, validation and Role 3 join
+- [robustness.sql](robustness.sql): executed HI/LI cutoff, key-quality and corridor comparison checks
 - [findings.md](findings.md): measured HI results, evidence links and Athena query IDs
+
 
 ## AWS resources
 
@@ -65,7 +67,7 @@ Betweenness is directed and unweighted. Primary Louvain uses undirected pairs we
 |---|---|
 | Job type | Neo4j import/analysis on existing EC2; future invocation through SSM |
 | Manual sources | `export_edges.sql`, `import.cypher`, `queries.cypher`, `athena_handoff.sql` |
-| Tested automated command | Pending EC2/SSM trial; runner remains a local draft |
+| Tested automated command | Pending EC2/SSM trial; runner is held on the Role 4 development branch |
 | Target | `i-0125056b848e5634a`, container `role4-neo4j` |
 | Accepted output table | `is459_g2t1_aml.bq1_graph_bank_features_hi01` |
 | Accepted output S3 path | `s3://is459-g2t1-aml-processed-bucket/bq1_graph_results/hi-01/bank_features/` |
@@ -84,6 +86,8 @@ Results: HI contains **5,159 bank nodes**, **29,374 directed corridors**, **34,5
 
 Sample development checks also passed: 42 bank nodes, 35 corridors/transfers and $434,634.33 reconciled; repeated imports did not change totals. Sample Louvain produced eight communities; sample findings are not substituted for HI results.
 
-Remaining: Bloom access/agreed fallback and final scenes; LI/cutoff/weighting robustness; final recommendations for Role 3; live runner/SSM/integration checks and measured runtime; final team presentation/video artefacts. Prepared drafts are not executed results and remain outside the validated GitHub submission.
+Athena cutoff and source/corridor checks have now passed for HI and LI; query IDs and evidence 10a-10f are recorded in `findings.md`. These checks do not establish stability of graph scores or sharing priorities.
+
+The team approved Neo4j Browser instead of Bloom on 3 November 2026, as reported by the user. Record this proposal-tool change in the report/slides. Remaining: three final Browser scenes; LI/cutoff/weighting graph robustness; final recommendations for Role 3; live runner/SSM/integration checks and measured runtime; final team presentation/video artefacts. Prepared drafts are not executed results and stay outside the validated main-branch submission.
 
 Evidence screenshots: [screenshots/](screenshots/) (linked to findings in [findings.md](findings.md)). Personal walkthroughs, tools, coordination notes, data exports and credentials remain gitignored.
