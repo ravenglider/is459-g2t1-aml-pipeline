@@ -20,3 +20,12 @@ __pycache__/
 
 # Local Role 4 helpers: do not commit or push
 /bq1/neo4j/tools/
+
+# Personal Role 4 coordination drafts and integration proposals: local only
+/bq1/neo4j/local-only/
+
+# Personal walkthrough: keep locally, not in the project submission
+/bq1/neo4j/Role4-Step-by-Step-Guide.md
+
+# Unreviewed clipboard captures are not project evidence
+/bq1/neo4j/screenshots/athena-capture-*.png
