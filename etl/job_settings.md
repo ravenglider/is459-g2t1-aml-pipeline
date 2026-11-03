@@ -4,7 +4,7 @@
 |---|---|---|
 | Job name | `is459-g2t1-etl-transactions-clean` | Team naming convention |
 | Type / engine | Spark, Python 3 | Distributed processing of ~32M rows |
-| Glue version | Glue 5.0 (Spark 3.5) | Stable runtime; 6.0 (Spark 4) has stricter type rules we did not need to risk |
+| Glue version | Glue 5.0 (Spark 3.5) | The script was tested locally on Spark 3.5, so 5.0 runs exactly what was tested. 6.0 costs the same but would need re-testing; upgrading later is a settings change plus one sample run |
 | IAM role | `AWSGlueServiceRole-is459g2t1` | Sonia's shared Glue role (reads raw bucket, writes processed bucket, updates the catalog) |
 | Worker type | G.1X | Smallest standard worker |
 | Number of workers | **2** for `sample`, **10** for HI-Medium / LI-Medium | Keep cost low while testing |

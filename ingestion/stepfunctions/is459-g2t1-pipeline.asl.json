@@ -76,10 +76,26 @@
       "Default": "WaitForRatesCrawler"
     },
     "ETL_TransactionsClean": {
-      "Type": "Pass",
-      "Comment": "Role 2 PLACEHOLDER. Replace with: Resource arn:aws:states:::glue:startJobRun.sync, Parameters { JobName: <role 2 glue job> }",
-      "Result": "placeholder: transactions_clean",
+      "Type": "Task",
+      "Comment": "Role 2: Glue job builds transactions_clean (Parquet) and updates the catalog. Fails on purpose if data quality checks fail.",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName": "is459-g2t1-etl-transactions-clean",
+        "Arguments": {
+          "--DATASET": "HI-Medium"
+        }
+      },
+      "TimeoutSeconds": 3600,
       "ResultPath": "$.etl",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.etlError",
+          "Next": "ETLFailed"
+        }
+      ],
       "Next": "Analytics"
     },
     "Analytics": {
@@ -88,12 +104,124 @@
       "ResultPath": "$.analytics",
       "Branches": [
         {
-          "StartAt": "BQ1_Corridors",
+          "StartAt": "BQ1_ResetOutputs",
           "States": {
-            "BQ1_Corridors": {
-              "Type": "Pass",
-              "Comment": "Role 3 PLACEHOLDER. Glue job (glue:startJobRun.sync) or Athena query (athena:startQueryExecution.sync) building bq1_corridors",
-              "Result": "placeholder: bq1_corridors",
+            "BQ1_ResetOutputs": {
+              "Type": "Task",
+              "Comment": "Role 1 helper: drop the 4 BQ1 tables and empty their S3 folders so CTAS can rerun",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "is459-g2t1-reset-outputs",
+                "Payload": {
+                  "bucket": "is459-g2t1-aml-processed-bucket",
+                  "database": "is459_g2t1_aml",
+                  "outputs": [
+                    {
+                      "table": "bq1_direct_corridors",
+                      "prefix": "bq1_direct_corridors/"
+                    },
+                    {
+                      "table": "bq1_attempt_banks",
+                      "prefix": "bq1_attempt_banks/"
+                    },
+                    {
+                      "table": "bq1_shared_attempt_value",
+                      "prefix": "bq1_shared_attempt_value/"
+                    },
+                    {
+                      "table": "bq1_corridors_ranked",
+                      "prefix": "bq1_corridors_ranked/"
+                    }
+                  ]
+                }
+              },
+              "ResultPath": null,
+              "Next": "BQ1_Step1_and_2a"
+            },
+            "BQ1_Step1_and_2a": {
+              "Type": "Parallel",
+              "Comment": "Role 3: steps 1 and 2a are independent, run together",
+              "ResultPath": null,
+              "Branches": [
+                {
+                  "StartAt": "BQ1_DirectCorridors",
+                  "States": {
+                    "BQ1_DirectCorridors": {
+                      "Type": "Task",
+                      "Comment": "Role 3 step 1: direct cross-bank corridor totals",
+                      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+                      "Parameters": {
+                        "QueryString": "CREATE TABLE is459_g2t1_aml.bq1_direct_corridors\nWITH (\n  format = 'PARQUET',\n  external_location = 's3://is459-g2t1-aml-processed-bucket/bq1_direct_corridors/'\n) AS\nSELECT\n  from_bank,\n  to_bank,\n  SUM(CASE WHEN is_laundering = 1 THEN amount_paid_usd ELSE 0 END) AS direct_laundered_usd,\n  SUM(amount_paid_usd) AS direct_total_usd,\n  COUNT(CASE WHEN is_laundering = 1 THEN 1 END) AS direct_laundering_txns,\n  COUNT(*) AS direct_total_txns\nFROM is459_g2t1_aml.transactions_clean\nWHERE dataset = 'HI-Medium'\n  AND cross_bank = 1\n  AND amount_paid_usd < 20000000\nGROUP BY from_bank, to_bank",
+                        "WorkGroup": "primary",
+                        "QueryExecutionContext": {
+                          "Database": "is459_g2t1_aml"
+                        },
+                        "ResultConfiguration": {
+                          "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+                        }
+                      },
+                      "ResultPath": null,
+                      "End": true
+                    }
+                  }
+                },
+                {
+                  "StartAt": "BQ1_AttemptBanks",
+                  "States": {
+                    "BQ1_AttemptBanks": {
+                      "Type": "Task",
+                      "Comment": "Role 3 step 2a: per-attempt totals and banks touched",
+                      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+                      "Parameters": {
+                        "QueryString": "CREATE TABLE is459_g2t1_aml.bq1_attempt_banks\nWITH (\n  format = 'PARQUET',\n  external_location = 's3://is459-g2t1-aml-processed-bucket/bq1_attempt_banks/'\n) AS\nSELECT\n  attempt_id,\n  SUM(amount_paid_usd) AS attempt_total_usd,\n  ARRAY_DISTINCT(ARRAY_AGG(DISTINCT from_bank) || ARRAY_AGG(DISTINCT to_bank)) AS banks_touched\nFROM is459_g2t1_aml.transactions_clean\nWHERE dataset = 'HI-Medium'\n  AND is_laundering = 1\n  AND attempt_id IS NOT NULL\n  AND amount_paid_usd < 20000000\nGROUP BY attempt_id",
+                        "WorkGroup": "primary",
+                        "QueryExecutionContext": {
+                          "Database": "is459_g2t1_aml"
+                        },
+                        "ResultConfiguration": {
+                          "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+                        }
+                      },
+                      "ResultPath": null,
+                      "End": true
+                    }
+                  }
+                }
+              ],
+              "Next": "BQ1_SharedAttemptValue"
+            },
+            "BQ1_SharedAttemptValue": {
+              "Type": "Task",
+              "Comment": "Role 3 step 2b: shared attempt value per bank pair",
+              "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+              "Parameters": {
+                "QueryString": "CREATE TABLE is459_g2t1_aml.bq1_shared_attempt_value\nWITH (\n  format = 'PARQUET',\n  external_location = 's3://is459-g2t1-aml-processed-bucket/bq1_shared_attempt_value/'\n) AS\nSELECT\n  a.bank_x AS from_bank,\n  b.bank_y AS to_bank,\n  SUM(t.attempt_total_usd) AS shared_attempt_value_usd\nFROM is459_g2t1_aml.bq1_attempt_banks t\nCROSS JOIN UNNEST(t.banks_touched) AS a(bank_x)\nCROSS JOIN UNNEST(t.banks_touched) AS b(bank_y)\nWHERE a.bank_x != b.bank_y\nGROUP BY a.bank_x, b.bank_y",
+                "WorkGroup": "primary",
+                "QueryExecutionContext": {
+                  "Database": "is459_g2t1_aml"
+                },
+                "ResultConfiguration": {
+                  "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+                }
+              },
+              "ResultPath": null,
+              "Next": "BQ1_CorridorsRanked"
+            },
+            "BQ1_CorridorsRanked": {
+              "Type": "Task",
+              "Comment": "Role 3 step 3: final ranked corridors (extra laundering value, blindspot gap)",
+              "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+              "Parameters": {
+                "QueryString": "CREATE TABLE is459_g2t1_aml.bq1_corridors_ranked\nWITH (\n  format = 'PARQUET',\n  external_location = 's3://is459-g2t1-aml-processed-bucket/bq1_corridors_ranked/'\n) AS\nSELECT\n  d.from_bank,\n  d.to_bank,\n  d.direct_laundered_usd,\n  COALESCE(s.shared_attempt_value_usd, 0) AS total_laundering_in_path_usd,\n  GREATEST(COALESCE(s.shared_attempt_value_usd, 0) - d.direct_laundered_usd, 0) AS extra_laundering_value_usd,\n  CASE WHEN COALESCE(s.shared_attempt_value_usd, 0) > 0\n    THEN GREATEST(COALESCE(s.shared_attempt_value_usd, 0) - d.direct_laundered_usd, 0)\n         / CAST(s.shared_attempt_value_usd AS DOUBLE)\n    ELSE 0 END AS blindspot_gap\nFROM is459_g2t1_aml.bq1_direct_corridors d\nLEFT JOIN is459_g2t1_aml.bq1_shared_attempt_value s\n  ON d.from_bank = s.from_bank AND d.to_bank = s.to_bank",
+                "WorkGroup": "primary",
+                "QueryExecutionContext": {
+                  "Database": "is459_g2t1_aml"
+                },
+                "ResultConfiguration": {
+                  "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+                }
+              },
+              "ResultPath": null,
               "Next": "BQ1_Neo4jLoad"
             },
             "BQ1_Neo4jLoad": {
@@ -123,6 +251,12 @@
         }
       ],
       "Next": "PipelineComplete"
+    },
+    "ETLFailed": {
+      "Type": "Fail",
+      "Error": "ETLFailed",
+      "Comment": "Stops the pipeline so BQ1 and BQ2 never run on bad data",
+      "CausePath": "$.etlError.Cause"
     },
     "PipelineComplete": {
       "Type": "Succeed",
