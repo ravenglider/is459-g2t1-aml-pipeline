@@ -175,6 +175,12 @@ class _SingleValue(argparse.Action):
         setattr(namespace, self.dest, values)
 
 
+class _DiscardRuntimeValue(argparse.Action):
+    """Consume an observed Glue internal option without retaining its value."""
+    def __call__(self, parser, namespace, values, option_string=None):
+        pass
+
+
 class PreflightArgumentError(SystemExit):
     """Exit code 2 plus redacted exception detail, even if stderr is unavailable."""
     def __init__(self, diagnostic):
@@ -248,6 +254,13 @@ def parse_arguments(argv=None):
                  "enable-rename-algorithm-v2", "enable-glue-datacatalog", "enable-data-lineage"):
         parser.add_argument("--" + name, nargs="?", const="true", choices=("true", "false", ""))
     parser.add_argument("--conf", action="append")  # Spark legitimately accepts repeated configurations.
+    # Observed in the second real Glue 5.0 run, NOT a documented public format.
+    # Six leftovers are consistent with three name/value pairs. Accept presence
+    # or ONE opaque value (including '=value'), never a greedy list that could
+    # swallow safety options. Discard values without parsing, using or logging.
+    for name in ("glue-di-packages-correlation-ids", "internal-lib-urls", "tenant-internal"):
+        parser.add_argument("--" + name, nargs="?", action=_DiscardRuntimeValue,
+                            default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     parsed, unknown = parser.parse_known_args(argv)
     if unknown:
         # Unlike getResolvedOptions, do NOT discard arbitrary extras. Strip
