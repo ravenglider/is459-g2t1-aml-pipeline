@@ -46,13 +46,29 @@ def validate_config(config):
     return config
 
 
-def _runtime_versions(spark):
-    java = spark.sparkContext._jvm.java.lang.System.getProperty("java.version")
-    versions = dict(glue_target="5.0", spark=spark.version, python=sys.version.split()[0], java=java)
-    if sys.version_info[:2] != (3, 11) or spark.version != "3.5.4" or java.split(".")[0] != "17":
-        raise ValueError("Requires Glue 5.0 target: Spark 3.5.4, Python 3.11, Java 17")
-    if spark.conf.get("spark.sql.session.timeZone") != "UTC":
-        raise ValueError("Spark session must explicitly use UTC")
+def _runtime_versions(spark, *, report=None):
+    """Retain observed runtime strings BEFORE checks; do not normalize away drift.
+
+    Spark remains an exact 3.5.4 match. Python uses version_info major/minor;
+    Java retains the existing dotted-major check. Vendor suffixes are evidence
+    for review, not an automatic exception to the approved runtime requirements.
+    """
+    versions = dict(glue_target="5.0", spark=spark.version, python=sys.version.split()[0],
+                    python_full=sys.version, python_version_info=list(sys.version_info[:3]))
+    if report is not None:
+        report["runtime"] = versions
+    versions["java"] = spark.sparkContext._jvm.java.lang.System.getProperty("java.version")
+    versions["session_timezone"] = spark.conf.get("spark.sql.session.timeZone")
+    versions["expected"] = dict(spark="3.5.4", python_major_minor="3.11", java_major="17", session_timezone="UTC")
+    java = versions["java"]
+    versions["checks"] = dict(spark=versions["spark"] == "3.5.4", python=sys.version_info[:2] == (3, 11),
+        java=isinstance(java, str) and java.split(".")[0] == "17", session_timezone=versions["session_timezone"] == "UTC")
+    versions["failed_requirements"] = [name for name, passed in versions["checks"].items() if not passed]
+    if versions["failed_requirements"]:
+        requirements = dict(spark="exact Spark 3.5.4", python="Python major/minor 3.11",
+                            java="Java major 17", session_timezone="UTC session timezone")
+        raise ValueError("Runtime compatibility failed: " + "; ".join(
+            name + " requires " + requirements[name] for name in versions["failed_requirements"]))
     return versions
 
 
@@ -120,7 +136,8 @@ def run_preflight(config, *, glue_context, catalog_client, s3_client, identity_c
             if client.meta.region_name != REGION:
                 raise ValueError("Client region must be us-east-1")
         spark = glue_context.spark_session
-        report["runtime"] = _runtime_versions(spark)
+        report["phase"] = "runtime_validation"
+        report["runtime"] = _runtime_versions(spark, report=report)
         report["phase"] = "inventory_before"
         before = inspect_sample_source(catalog_client, s3_client)
         report["source_before"] = {key: before[key] for key in ("source_fingerprint", "table_fingerprint", "partitions_fingerprint")}

@@ -362,6 +362,57 @@ import glue_sample_preflight
             context_type.assert_not_called()
 
 
+class RuntimeVersionTests(unittest.TestCase):
+    """Raw version evidence and unchanged strict checks; no actual Spark startup."""
+    def spark(self, version="3.5.4", java="17.0.12+7-LTS", timezone="UTC"):
+        spark = MagicMock()
+        spark.version = version
+        spark.sparkContext._jvm.java.lang.System.getProperty.return_value = java
+        spark.conf.get.return_value = timezone
+        return spark
+
+    def test_matching_runtime_keeps_raw_strings_and_python_version_info(self):
+        python = "3.11.13 (vendor build, synthetic) [GCC synthetic]"
+        report = {}
+        with patch.object(preflight.sys, "version_info", (3, 11, 13)), patch.object(preflight.sys, "version", python):
+            observed = preflight._runtime_versions(self.spark(), report=report)
+        self.assertIs(report["runtime"], observed)
+        self.assertEqual(observed["python_full"], python)
+        self.assertEqual(observed["python"], "3.11.13")
+        self.assertEqual(observed["python_version_info"], [3, 11, 13])
+        self.assertEqual(observed["java"], "17.0.12+7-LTS")
+        self.assertTrue(all(observed["checks"].values()))
+        self.assertEqual(observed["failed_requirements"], [])
+
+    def test_mismatches_identify_each_requirement_without_relaxing_suffixes(self):
+        for spark, java, info, python, expected in (
+            ("3.5.4-amzn-0", "17.0.12", (3, 11, 9), "3.11.9", ["spark"]),
+            ("3.5.6", "17", (3, 11, 9), "3.11.9", ["spark"]),
+            ("3.5.4", "17.0.12", (3, 12, 1), "3.12.1", ["python"]),
+            ("3.5.4", "21.0.1", (3, 11, 9), "3.11.9", ["java"]),
+            ("3.5.4", "17-ea", (3, 11, 9), "3.11.9", ["java"]),
+            ("3.5.4", None, (3, 11, 9), "3.11.9", ["java"]),
+            ("4.0.0", "21", (3, 12, 1), "3.12.1", ["spark", "python", "java"]),
+        ):
+            report = {}
+            with self.subTest(spark=spark, java=java, python=python), patch.object(preflight.sys, "version_info", info), patch.object(
+                    preflight.sys, "version", python), self.assertRaises(ValueError) as caught:
+                preflight._runtime_versions(self.spark(spark, java), report=report)
+            self.assertEqual(report["runtime"]["spark"], spark)
+            self.assertEqual(report["runtime"]["java"], java)
+            self.assertEqual(report["runtime"]["python_full"], python)
+            self.assertEqual(report["runtime"]["failed_requirements"], expected)
+            for name in expected:
+                self.assertIn(name + " requires", str(caught.exception))
+
+    def test_timezone_mismatch_retains_version_diagnostics(self):
+        report = {}
+        with patch.object(preflight.sys, "version_info", (3, 11, 9)), self.assertRaisesRegex(ValueError, "session_timezone requires"):
+            preflight._runtime_versions(self.spark(timezone="Asia/Singapore"), report=report)
+        self.assertEqual(report["runtime"]["failed_requirements"], ["session_timezone"])
+        self.assertEqual(report["runtime"]["session_timezone"], "Asia/Singapore")
+
+
 class PreflightOrchestrationTests(unittest.TestCase):
     """Mock analytical work; assert orchestration reads only and cleans own cache."""
     def setUp(self):
@@ -433,6 +484,27 @@ class PreflightOrchestrationTests(unittest.TestCase):
         with self.assertRaises(preflight.PreflightFailure):
             self.run_job()
         self.assertEqual(self.catalog.calls, [])
+
+    def test_failed_report_retains_actual_versions_and_names_mismatch_before_inventory(self):
+        self.context.spark_session.version = "3.5.4-amzn-synthetic"
+        self.context.spark_session.sparkContext._jvm.java.lang.System.getProperty.return_value = "17.0.12+7-LTS"
+        with patch.object(preflight.sys, "version_info", (3, 11, 13)), patch.object(
+                preflight.sys, "version", "3.11.13 (synthetic vendor build)"), self.assertRaises(preflight.PreflightFailure) as caught:
+            self.run_job()
+        report = caught.exception.report
+        self.assertEqual(report["status"], "FAILED")
+        self.assertEqual(report["phase"], "runtime_validation")
+        self.assertEqual(report["runtime"]["spark"], "3.5.4-amzn-synthetic")
+        self.assertEqual(report["runtime"]["python_full"], "3.11.13 (synthetic vendor build)")
+        self.assertEqual(report["runtime"]["java"], "17.0.12+7-LTS")
+        self.assertEqual(report["runtime"]["failed_requirements"], ["spark"])
+        self.assertIn("spark requires exact Spark 3.5.4", report["error"]["message"])
+        self.assertNotIn("source_objects", report)
+        self.assertNotIn("metrics", report)
+        self.assertEqual(self.catalog.calls, [])
+        self.assertEqual(self.s3.calls, [])
+        self.frame.unpersist.assert_not_called()
+        json.dumps(report)  # Log-ready version evidence, without argv/credentials.
 
     def test_generation_staging_and_publication_functions_are_never_called(self):
         targets = ["bq2_sequence_builder.build_two_hop_links", "bq2_sequence_builder.build_three_hop_links",
