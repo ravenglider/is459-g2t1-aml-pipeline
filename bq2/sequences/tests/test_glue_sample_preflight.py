@@ -384,12 +384,30 @@ class RuntimeVersionTests(unittest.TestCase):
         self.assertTrue(all(observed["checks"].values()))
         self.assertEqual(observed["failed_requirements"], [])
 
+    def test_only_local_and_observed_glue_spark_versions_are_accepted(self):
+        for version in ("3.5.4", "3.5.4-amzn-0"):
+            report = {}
+            with self.subTest(version=version), patch.object(preflight.sys, "version_info", (3, 11, 15)), patch.object(
+                    preflight.sys, "version", "3.11.15 (synthetic build string)"):
+                observed = preflight._runtime_versions(self.spark(version, "17.0.20"), report=report)
+            self.assertEqual(report["runtime"]["spark"], version)
+            self.assertEqual(observed["expected"]["spark"], ["3.5.4", "3.5.4-amzn-0"])
+            self.assertTrue(all(observed["checks"].values()))
+            self.assertEqual(observed["failed_requirements"], [])
+
     def test_mismatches_identify_each_requirement_without_relaxing_suffixes(self):
         for spark, java, info, python, expected in (
-            ("3.5.4-amzn-0", "17.0.12", (3, 11, 9), "3.11.9", ["spark"]),
+            ("3.5.4-amzn-1", "17.0.12", (3, 11, 9), "3.11.9", ["spark"]),
+            ("3.5.5", "17.0.20", (3, 11, 15), "3.11.15", ["spark"]),
+            ("3.5.4-custom", "17.0.20", (3, 11, 15), "3.11.15", ["spark"]),
+            ("3.5.4-amzn-0-extra", "17.0.20", (3, 11, 15), "3.11.15", ["spark"]),
+            ("3.5.4 ", "17.0.20", (3, 11, 15), "3.11.15", ["spark"]),
+            ("4.0.0", "17.0.20", (3, 11, 15), "3.11.15", ["spark"]),
             ("3.5.6", "17", (3, 11, 9), "3.11.9", ["spark"]),
             ("3.5.4", "17.0.12", (3, 12, 1), "3.12.1", ["python"]),
             ("3.5.4", "21.0.1", (3, 11, 9), "3.11.9", ["java"]),
+            ("3.5.4-amzn-0", "21.0.1", (3, 11, 15), "3.11.15", ["java"]),
+            ("3.5.4-amzn-0", "17.0.20", (3, 12, 1), "3.12.1", ["python"]),
             ("3.5.4", "17-ea", (3, 11, 9), "3.11.9", ["java"]),
             ("3.5.4", None, (3, 11, 9), "3.11.9", ["java"]),
             ("4.0.0", "21", (3, 12, 1), "3.12.1", ["spark", "python", "java"]),
@@ -411,6 +429,13 @@ class RuntimeVersionTests(unittest.TestCase):
             preflight._runtime_versions(self.spark(timezone="Asia/Singapore"), report=report)
         self.assertEqual(report["runtime"]["failed_requirements"], ["session_timezone"])
         self.assertEqual(report["runtime"]["session_timezone"], "Asia/Singapore")
+
+    def test_observed_glue_build_does_not_bypass_timezone_check(self):
+        report = {}
+        with patch.object(preflight.sys, "version_info", (3, 11, 15)), self.assertRaisesRegex(ValueError, "session_timezone requires"):
+            preflight._runtime_versions(self.spark("3.5.4-amzn-0", "17.0.20", "Asia/Singapore"), report=report)
+        self.assertTrue(report["runtime"]["checks"]["spark"])
+        self.assertEqual(report["runtime"]["failed_requirements"], ["session_timezone"])
 
 
 class PreflightOrchestrationTests(unittest.TestCase):

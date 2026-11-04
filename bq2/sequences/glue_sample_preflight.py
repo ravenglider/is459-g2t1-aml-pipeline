@@ -17,6 +17,7 @@ from sequence_aws import DATABASE, TABLE, SAMPLE_DATES, require_verified_timezon
 REGION = "us-east-1"
 JOB_NAME = "is459-g2t1-bq2-sample-preflight"
 REPORT_ROOT = "s3://is459-g2t1-aml-processed-bucket/bq2_sequences_metadata/development/preflight/"
+SUPPORTED_SPARK_VERSIONS = ("3.5.4", "3.5.4-amzn-0")
 
 
 class PreflightFailure(RuntimeError):
@@ -49,9 +50,9 @@ def validate_config(config):
 def _runtime_versions(spark, *, report=None):
     """Retain observed runtime strings BEFORE checks; do not normalize away drift.
 
-    Spark remains an exact 3.5.4 match. Python uses version_info major/minor;
-    Java retains the existing dotted-major check. Vendor suffixes are evidence
-    for review, not an automatic exception to the approved runtime requirements.
+    Spark accepts only local 3.5.4 and the Glue 5.0 build observed in run04.
+    Python uses version_info major/minor; Java retains the dotted-major check.
+    Other vendor suffixes require separate evidence/review.
     """
     versions = dict(glue_target="5.0", spark=spark.version, python=sys.version.split()[0],
                     python_full=sys.version, python_version_info=list(sys.version_info[:3]))
@@ -59,13 +60,13 @@ def _runtime_versions(spark, *, report=None):
         report["runtime"] = versions
     versions["java"] = spark.sparkContext._jvm.java.lang.System.getProperty("java.version")
     versions["session_timezone"] = spark.conf.get("spark.sql.session.timeZone")
-    versions["expected"] = dict(spark="3.5.4", python_major_minor="3.11", java_major="17", session_timezone="UTC")
+    versions["expected"] = dict(spark=list(SUPPORTED_SPARK_VERSIONS), python_major_minor="3.11", java_major="17", session_timezone="UTC")
     java = versions["java"]
-    versions["checks"] = dict(spark=versions["spark"] == "3.5.4", python=sys.version_info[:2] == (3, 11),
+    versions["checks"] = dict(spark=versions["spark"] in SUPPORTED_SPARK_VERSIONS, python=sys.version_info[:2] == (3, 11),
         java=isinstance(java, str) and java.split(".")[0] == "17", session_timezone=versions["session_timezone"] == "UTC")
     versions["failed_requirements"] = [name for name, passed in versions["checks"].items() if not passed]
     if versions["failed_requirements"]:
-        requirements = dict(spark="exact Spark 3.5.4", python="Python major/minor 3.11",
+        requirements = dict(spark="exact Spark 3.5.4 or 3.5.4-amzn-0", python="Python major/minor 3.11",
                             java="Java major 17", session_timezone="UTC session timezone")
         raise ValueError("Runtime compatibility failed: " + "; ".join(
             name + " requires " + requirements[name] for name in versions["failed_requirements"]))
