@@ -232,6 +232,54 @@ import glue_sample_preflight
             preflight.parse_arguments(argv + ["--NEW_UNREVIEWED_OPTION", "private-value"])
         self.assertEqual(caught.exception.diagnostic["arguments"], ["--NEW_UNREVIEWED_OPTION"])
 
+    def test_observed_glue5_internal_arguments_consume_exact_six_tokens_opaquely(self):
+        observed = ["--glue-di-packages-correlation-ids", "SYNTHETIC_PRIVATE_CORRELATION_VALUE",
+                    "--internal-lib-urls", "https://example.invalid/private?token=SYNTHETIC_PRIVATE_URL_VALUE",
+                    "--tenant-internal", "SYNTHETIC_PRIVATE_TENANT_VALUE"]
+        self.assertEqual(len(observed), 6)
+        with patch("sys.stdout", new_callable=io.StringIO) as out, patch("sys.stderr", new_callable=io.StringIO) as err:
+            parsed = preflight.parse_arguments(cli_args() + ["--JOB_NAME", preflight.JOB_NAME,
+                                                              "--ALLOW_AWS_READS=true"] + observed)
+        self.assertEqual(parsed.ALLOW_AWS_READS, "true")
+        self.assertEqual(parsed.DATASET, "sample")
+        self.assertEqual(parsed.REGION, "us-east-1")
+        for name in ("glue_di_packages_correlation_ids", "internal_lib_urls", "tenant_internal"):
+            self.assertFalse(hasattr(parsed, name))
+        for value in observed[1::2]:
+            self.assertNotIn(value, repr(vars(parsed)) + out.getvalue() + err.getvalue())
+        self.assertEqual(out.getvalue(), "")
+        self.assertEqual(err.getvalue(), "")
+
+    def test_observed_internals_have_bounded_optional_values_and_do_not_activate_reads(self):
+        names = ["--glue-di-packages-correlation-ids", "--internal-lib-urls", "--tenant-internal"]
+        for runtime in (names, [name + "=" for name in names],
+                        [name + '=opaque,{"future":"shape"}' for name in names],
+                        [name + "=--ALLOW_AWS_READS=true" for name in names]):
+            with self.subTest(runtime=runtime):
+                self.assertEqual(preflight.parse_arguments(cli_args() + runtime).ALLOW_AWS_READS, "false")
+                enabled = preflight.parse_arguments(cli_args() + runtime + ["--ALLOW_AWS_READS", "true"])
+                self.assertEqual(enabled.ALLOW_AWS_READS, "true")
+        # An absent opaque value cannot swallow or replace a required safety value.
+        with patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(preflight.PreflightArgumentError):
+            preflight.parse_arguments(cli_args() + names + ["--ALLOW_AWS_READS"])
+
+    def test_observed_internals_do_not_hide_unknown_options_or_duplicate_activation(self):
+        observed = ["--glue-di-packages-correlation-ids", "PRIVATE_CORRELATION",
+                    "--internal-lib-urls", "PRIVATE_INTERNAL_URL", "--tenant-internal", "PRIVATE_TENANT"]
+        for extra in (["--tenant-internal-unreviewed", "PRIVATE_UNKNOWN_VALUE"],
+                      ["--ROLE5_UNKNOWN=PRIVATE_UNKNOWN_VALUE"],
+                      ["--ALLOW_AWS_READS=true", "--allow-aws-reads=false"],
+                      ["--ALLOW_AWS_READS=true", "--ALLOW_AWS_READS=true"]):
+            with self.subTest(extra=extra), patch("sys.stdout", new_callable=io.StringIO) as out, patch(
+                    "sys.stderr", new_callable=io.StringIO) as err, self.assertRaises(preflight.PreflightArgumentError) as caught:
+                preflight.parse_arguments(cli_args() + observed + extra)
+            self.assertEqual(caught.exception.code, 2)
+            self.assertFalse(caught.exception.diagnostic["values_logged"])
+            self.assertNotIn("PRIVATE_", out.getvalue() + err.getvalue() + str(caught.exception))
+            if extra[0] == "--tenant-internal-unreviewed":
+                self.assertEqual(caught.exception.diagnostic["arguments"], ["--tenant-internal-unreviewed"])
+                self.assertEqual(caught.exception.diagnostic["unparsed_count"], 2)
+
     def test_argument_failure_diagnostics_never_log_values_or_raw_argparse_context(self):
         secret = "SYNTHETIC_PRIVATE_VALUE_98765"
         for extra, reason, option in (
