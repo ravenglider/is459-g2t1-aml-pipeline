@@ -2,7 +2,7 @@
 
 **Owner:** Ji Ning. **Status updated:** 5 November 2026.
 
-Role 5 builds linked payment-method and currency sequences from Role 2's cleaned transactions, preserving transaction identities and laundering labels for Xiang Ying's Role 6 Athena analysis. The builder and supporting workflow have been tested locally. Release `_06` completed real sample validation but Glue marked the job Failed due to `SystemExit: 0`. Release `_07` fixes that exit handling and is uploaded/configured, but has not been executed; the seventh paid run is not approved.
+Role 5 builds linked payment-method and currency sequences from Role 2's cleaned transactions, preserving transaction identities and laundering labels for Xiang Ying's Role 6 Athena analysis. The builder and supporting workflow have been tested locally. Release `_07` completed the sample-only AWS Glue preflight successfully in run09 (`SUCCEEDED`, `VALIDATED_READ_ONLY`). Real sequence generation and publication remain unfinished; this validation covers only the provided 500,000-row sample.
 
 ## Sequence-building rules
 
@@ -49,7 +49,7 @@ Role 6 uses `any_laundering` for descriptive lift, separately by dataset and seq
 | [sequence_s3.py](sequence_s3.py) | Injected S3 staging/read-back and conditional receipt/manifest adapters. Locally tested with fake S3 and real local Parquet; no real AWS staging performed. S3 run manifests stop at `READY_TO_PLAN`. |
 | [sequence_publication.py](sequence_publication.py) | Increment 3A only: pure development publication plans, recovery evidence and simulated ordered journals. No copying, Catalog mutations, rollback execution or `PUBLISHED` success. |
 | [glue_sequence_job.py](glue_sequence_job.py) | Offline configuration CLI and gated runtime/batch helpers. Cloud sequence-generation orchestration remains unfinished. |
-| [glue_sample_preflight.py](glue_sample_preflight.py) | Dedicated sample validation/candidate-profile entry point; `_06` validated the real sample but failed at exit. `_07` is uploaded/configured, not executed. |
+| [glue_sample_preflight.py](glue_sample_preflight.py) | Dedicated sample validation/candidate-profile entry point; release `_07` succeeded in real AWS run09. No pairs/triples or sequence outputs were generated. |
 | [package_glue_modules.py](package_glue_modules.py) | Deterministic allowlisted ZIP creation; no upload or dependency installation. |
 | [preflight_job_settings.md](preflight_job_settings.md) | Proposed runtime settings, argument behavior, evidence requirements and execution checklist. Current upload/deployment status is recorded below. |
 | [tests/](tests/) | Synthetic fixtures, Spark regression checks, fake AWS clients, local Parquet tests and packaging/import checks. |
@@ -66,10 +66,10 @@ Staging validates written data before marking an attempt `VALIDATED`; `_SUCCESS`
 | Glue database | `is459_g2t1_aml` | Existing |
 | Source table | `is459_g2t1_aml.transactions_clean` | Existing Role 2 output |
 | Processed/source bucket | `is459-g2t1-aml-processed-bucket` | Existing |
-| Shared IAM role | `AWSGlueServiceRole-is459g2t1` | Existing; run06 exercised sample-read permissions, not sequence staging/publication permissions |
+| Shared IAM role | `AWSGlueServiceRole-is459g2t1` | Existing; run09 exercised sample-read permissions, not sequence staging/publication permissions |
 | Script bucket/prefix | `s3://is459-g2t1-aml-athena-bucket/scripts/` | Existing team location |
 | Glue temporary prefix | `s3://is459-g2t1-aml-athena-bucket/glue-temp/` | Existing team location |
-| Dedicated preflight job | `is459-g2t1-bq2-sample-preflight` | Existing; configured for `_07`, execution not approved |
+| Dedicated preflight job | `is459-g2t1-bq2-sample-preflight` | Existing; release `_07` run09 **SUCCEEDED** |
 | Future sequence-builder job | `is459-g2t1-bq2-sequence-builder` | Intended name in integration helpers; not deployed |
 
 Read the actual cleaned schema in [etl/schema_transactions_clean.md](../../etl/schema_transactions_clean.md), Role 2's [handoff](../../etl/README.md), and the [group infrastructure handoff](../../docs/ingestion-handoff.md). Input has 20 logical columns, partitioned by string `dataset` and `txn_date`. Always select a dataset; do not mix the sample with HI or LI. The builder now targets cleaned data, not the old raw-sample fallback.
@@ -89,7 +89,7 @@ The existing local replacement planner uses fixed canonical locations. The separ
 
 ## AWS S3 upload: completed
 
-**Current release:** `sample_preflight_20261105_07`, packaged from committed `main` at `f9b182e748faf3f8d2f545b7603cf80441aef8a5`. Ji Ning confirms both artifacts were uploaded and the existing Glue job now references this script and ZIP. Release `_07` has **not been executed in AWS**; upload/configuration does not establish successful job completion. Earlier releases remain historical artifacts.
+**Current release:** `sample_preflight_20261105_07`, packaged from committed `main` at `f9b182e748faf3f8d2f545b7603cf80441aef8a5`. Ji Ning confirms both artifacts were uploaded and the existing Glue job now references this script and ZIP. Release `_07` successfully executed in AWS as run09 after both release artifacts were verified and the job configuration was updated via AWS CLI without overwriting the corrected script. Earlier runs are recorded below.
 
 | Artifact | Uploaded S3 URI |
 |---|---|
@@ -151,29 +151,45 @@ python -m zipfile -l /tmp/role5_preflight_new_release.zip
 
 Packaging performs no upload. Keep virtual environments, credentials, transaction data and generated artifacts out of Git.
 
-## AWS sample-preflight scope and run06 evidence
+## AWS sample-preflight scope and run09 evidence
 
-Release `sample_preflight_20261104_06` logged a CloudWatch `PREFLIGHT |` report with **`status=VALIDATED_READ_ONLY` and `phase=complete`**:
+Release `sample_preflight_20261105_07` completed the real sample preflight successfully. Verified run09 evidence:
 
-| Validation evidence | Run06 result |
+| Validation evidence | Run09 result |
 |---|---|
-| Sample transactions | 500,000 |
-| Laundering-labelled rows | 35 |
+| Job / region | `is459-g2t1-bq2-sample-preflight` / `us-east-1` |
+| Application Run ID | `sample_preflight_20261105_run09` |
+| AWS JobRunId | `jr_6cc9cc1dc06ef48480158bddfdee3348b0450ef9e4f35ff4337ea88c92a34dc3` |
+| AWS Glue job status | **`SUCCEEDED`** |
+| CloudWatch `PREFLIGHT` status / phase | **`VALIDATED_READ_ONLY` / `complete`** |
+| Sample transactions / laundering-labelled transactions | **500,000 / 35** |
 | Date coverage | All six dates: `2022-09-01` through `2022-09-06` |
-| Source checks | Physical schema and UTC timestamps validated; before/after source fingerprints matched |
+| Schema and timestamps | Physical schema and UTC timestamp consistency passed |
+| Runtime | Glue 5.0; Spark `3.5.4-amzn-0`; Python `3.11.15`; Java `17.0.20` |
+| Source consistency | Before/after source, table and partition fingerprints matched |
 | Conservative pair-candidate upper bound | **751,390**; not an actual pair count |
+| Validation elapsed time | **96.553 seconds**; not total job or billed runtime |
 | Materialized sequences | **No pairs or triples materialized** |
-| AWS Glue job status | **Failed**: entry-point guard raised `SystemExit: 0` after validation completed |
+| Report storage | JSON evidence in CloudWatch only; **no S3 report written** |
+| Identity verification scope | Provided sample DataFrame only; dataset-wide identity was **not verified beyond that frame** |
 
-This is successful read-only validation evidence, **not a successfully completed Glue job**. Release `_07` changes the entry guard to return normally on success while preserving nonzero failures and exceptions. Its 182-test Ubuntu regression suite passed, but it has not been executed in AWS.
+Matching inventories are change-detection evidence, not a transactional snapshot or proof of full-dataset coverage. The successful sample preflight does not complete sequence generation, staging or publication.
 
-The existing job is configured with the `_07` artifact paths above, the ZIP hash as `--BUILDER_FINGERPRINT`, and `--RUN_ID=sample_preflight_20261105_run07`. **The seventh paid Glue run is NOT APPROVED.** No execution is implied by this configuration.
+### Deployment history
+
+| Run | Outcome |
+|---|---|
+| Run06, release `_06` | Real sample validation passed (`VALIDATED_READ_ONLY`, `phase=complete`), but Glue marked the job **Failed** because the entry-point guard raised `SystemExit(0)`. |
+| Runs07 and 08, release `_07` deployment attempts | **Failed** because the deployed S3 entry-point script contained outdated exit-handling code. |
+| Run09, release `_07` | **SUCCEEDED** after verifying both release artifacts and updating the job configuration via AWS CLI without overwriting the corrected script. |
+
+Release `_07` returns normally on success while preserving nonzero failures and exceptions. It was packaged from commit `f9b182e748faf3f8d2f545b7603cf80441aef8a5` and passed 182 Ubuntu tests. Run09 used the artifact paths and ZIP fingerprint recorded above with `--RUN_ID=sample_preflight_20261105_run09`.
 
 The dedicated job validates and profiles the real sample only. It does not generate payment sequences, write sequence Parquet, publish tables, query Athena or modify the Catalog.
 
 1. Check the confirmed group account and `us-east-1`, runtime versions and explicit UTC session setting.
 2. Inventory all six cleaned `sample` partitions for **1–6 September 2022**, checking exact Catalog/S3 locations and physical Parquet types.
-3. Read only those partitions using Catalog pushdown. Validate the 20-column schema, required fields, original binary labels, minute timestamps, `txn_date` consistency and ID uniqueness across the complete sample.
+3. Read only those partitions using Catalog pushdown. Validate the 20-column schema, required fields, original binary labels, minute timestamps, `txn_date` consistency and ID uniqueness within the provided sample DataFrame. This is not dataset-wide identity verification beyond that frame.
 4. Require the documented baseline of **500,000 transactions and 35 laundering-labelled rows**; discrepancies stop the run.
 5. Estimate a conservative pair-candidate bound for owner **1 September**, using continuation input through **3 September** and preceding dates 1–2 September. This joins grouped degrees, not transaction-level pairs; exact triple projection is deferred.
 6. Recheck source/Catalog inventories, release owned persistence and log the JSON evidence with prefix `PREFLIGHT |`.
@@ -209,14 +225,14 @@ A real successful validation must include a `VALIDATED_READ_ONLY` report with ma
 | Local builder, validation, batch and staging tests | COMPLETED locally |
 | Preflight Python script and ZIP uploaded to S3 | **COMPLETED**, release recorded above |
 | Dedicated preflight Glue job created | **COMPLETED**; existing job configured for `_07` |
-| Real sample validation evidence | `_06`: `VALIDATED_READ_ONLY`, `phase=complete`; Glue job nevertheless **Failed** at exit |
-| Release `_07` AWS execution | **NOT EXECUTED**; seventh paid run **NOT APPROVED** |
+| Real sample validation evidence | Run09: `VALIDATED_READ_ONLY`, `phase=complete`; 500,000 transactions and 35 laundering labels |
+| Release `_07` AWS execution | **COMPLETED**: run09 Glue status `SUCCEEDED` |
 | Real BQ2 sequence generation | **NOT YET** |
 | HI-Medium/LI-Medium processing by Role 5 | **NOT YET** |
 | Catalog table publication | **NOT YET** |
 | Publication preparation/copying, Catalog switching and rollback execution | **NOT YET**; only pure planning/journal logic exists |
 
-Any further paid execution requires separate approval and coordination with Sonia, a renewed no-refresh agreement and review of saved job settings. The seventh paid run is not approved. Do not run the shared Step Functions pipeline for the first sample test: its current ETL argument selects HI-Medium. No full-data runtime or final growth thresholds are known.
+Any further paid execution requires separate approval and coordination with Sonia, a renewed no-refresh agreement and review of saved job settings. Do not run the shared Step Functions pipeline for the first sample test: its current ETL argument selects HI-Medium. No full-data runtime or final growth thresholds are known.
 
 ## Intended Step Functions handoff for Sonia
 
@@ -225,20 +241,20 @@ The repository's [state-machine definition](../../ingestion/stepfunctions/is459-
 | Field | Dedicated preflight | Future BQ2 sequence workflow |
 |---|---|---|
 | Job type | Existing dedicated Glue Spark job | Planned Glue Spark workflow |
-| Exact name | `is459-g2t1-bq2-sample-preflight` (existing; `_07` configured, not run) | Intended `is459-g2t1-bq2-sequence-builder`; final runnable orchestration awaiting completion |
-| Integration | Potential `arn:aws:states:::glue:startJobRun.sync`, after standalone validation | Intended `.sync` task after source readiness and publication completion logic are verified |
+| Exact name | `is459-g2t1-bq2-sample-preflight` (release `_07` run09 succeeded) | Intended `is459-g2t1-bq2-sequence-builder`; final runnable orchestration awaiting completion |
+| Integration | Potential `arn:aws:states:::glue:startJobRun.sync`; standalone sample preflight succeeded, shared integration remains planned | Intended `.sync` task after source readiness and publication completion logic are verified |
 | Inputs/dependencies | Cleaned sample, timezone evidence, current no-refresh agreement, tested release | Cleaned dataset, dataset-wide validation, consistent source inventory, confirmed coverage and measured limits |
 | Output table | None; validation/profile logs only | Intended `bq2_sequences_dev` first, then `bq2_sequences` after separate validation/approval |
 | Output path | Design-only metadata URI; no report S3 writes | Proposed processed-bucket paths above; versioned development publication still requires implementation |
 | Dataset arguments | `sample` only, explicit read activation | Future HI/LI orchestration requires Sonia's coordination; initial integration helpers remain sample/development-only |
-| Runtime and cost | Real AWS runtime/cost unknown | Full-data runtime/cost unknown |
+| Runtime and cost | Validation elapsed: 96.553 seconds; total billed runtime/cost not recorded | Full-data runtime/cost unknown |
 | Downstream gate | Validated evidence; does not supply Role 6's sequence table | Role 6 queries only after independently verified publication and reader coordination |
 
 Do not replace the sequence-builder placeholder with a preflight that merely exits successfully. The real sequence workflow and table publication must work before the BQ2 analytics dependency can be satisfied.
 
 ## Remaining documentation and delivery items
 
-- Retain run06 CloudWatch evidence and record exact JobRunIds, actual job settings, elapsed runtime and measured costs; those details are not recorded here. Do not execute `_07` without separate approval.
+- Retain run06 through run09 CloudWatch evidence and the verified run09 JobRunId above. Record total job runtime, measured cost and actual worker/settings evidence separately; 96.553 seconds is validation elapsed time, not billed runtime.
 - Agree sample growth limits and a bounded development sequence batch with Xiang Ying before generation.
 - Complete publication version preparation, durable journals, Catalog reconciliation, reader coordination and recovery execution before exposing development data.
 - Add a real chain walkthrough after obtaining and validating actual sequence output. The current chain example in `sequence_rules.md` is fictional; `example_chain.md` has not been created.
@@ -246,4 +262,4 @@ Do not replace the sequence-builder placeholder with a preflight that merely exi
 
 ## Contribution summary for Week 13
 
-Implemented and locally tested the Role 5 PySpark builder for linked two- and three-transaction payment-method/currency sequences, including the approved labelled output, source validation, bounded batching, growth safeguards and staging/publication preparation. Validated the real cleaned sample and profiled candidate growth in AWS with release `_06`; corrected its exit-handling issue in the uploaded/configured `_07` release, which remains unexecuted. Real sequence generation and sequence-table publication remain pending.
+Implemented and locally tested the Role 5 PySpark builder for linked two- and three-transaction payment-method/currency sequences, including the approved labelled output, source validation, bounded batching, growth safeguards and staging/publication preparation. Completed the read-only AWS Glue sample preflight with release `_07` in run09, validating 500,000 sample transactions and profiling conservative candidate growth. Real sequence generation and sequence-table publication remain pending.
