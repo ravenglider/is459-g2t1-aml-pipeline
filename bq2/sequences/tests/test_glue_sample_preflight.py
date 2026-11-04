@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import types
+import traceback
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -72,6 +73,10 @@ def sample_s3():
 class PreflightMetadataTests(unittest.TestCase):
     def setUp(self):
         self.catalog, self.s3 = FakeCatalog(), sample_s3()
+        self.diagnostics = io.StringIO()
+        capture = patch("sys.stdout", self.diagnostics)
+        capture.start()
+        self.addCleanup(capture.stop)
 
     def test_import_safe_without_spark_or_cloud_libraries(self):
         script = '''
@@ -205,6 +210,68 @@ import glue_sample_preflight
         for extra in (["--ROLE5_UNKNOWN", "value"], ["--DATASE", "sample"],
                       ["--JOB_NAME", preflight.JOB_NAME, "--JOB_NAME", preflight.JOB_NAME]):
             with patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit):
+                preflight.parse_arguments(cli_args() + extra)
+
+    def test_documented_glue5_reserved_and_logging_arguments(self):
+        argv = cli_args() + ["--JOB_NAME", preflight.JOB_NAME, "--JOB_RUN_ID", "jr_simulated",
+            "--ALLOW_AWS_READS=true", "--encryption-type", "sse-s3",
+            "--RedshiftTempDir", "s3://not-accessed/temp/", "--continuation-option", "continuation-ignore",
+            "--job-bookmark-from", "jr_old", "--job-bookmark-to", "jr_new",
+            "--enable-continuous-log-filter", "true", "--enable-glue-datacatalog", "",
+            "--enable-s3-parquet-optimized-committer", "true", "--enable-data-lineage", "false",
+            "--continuous-log-logGroup", "synthetic-group", "--continuous-log-logStreamPrefix", "synthetic-stream",
+            "--continuous-log-conversionPattern", "%m%n", "--custom-logGroup-prefix", "synthetic-prefix",
+            "--custom-logStream-prefix", "synthetic-prefix"]
+        parsed = preflight.parse_arguments(argv)
+        self.assertEqual(parsed.ALLOW_AWS_READS, "true")
+        self.assertEqual(parsed.encryption_type, "sse-s3")
+        self.assertEqual(parsed.enable_glue_datacatalog, "")
+        self.assertEqual(parsed.enable_continuous_log_filter, "true")
+        # Arbitrary extras still fail, even in an otherwise valid Glue invocation.
+        with patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(preflight.PreflightArgumentError) as caught:
+            preflight.parse_arguments(argv + ["--NEW_UNREVIEWED_OPTION", "private-value"])
+        self.assertEqual(caught.exception.diagnostic["arguments"], ["--NEW_UNREVIEWED_OPTION"])
+
+    def test_argument_failure_diagnostics_never_log_values_or_raw_argparse_context(self):
+        secret = "SYNTHETIC_PRIVATE_VALUE_98765"
+        for extra, reason, option in (
+            (["--ALLOW_AWS_READS=" + secret], "invalid_value", "--ALLOW_AWS_READS"),
+            (["--ROLE5_UNKNOWN=" + secret], "unrecognized_arguments", "--ROLE5_UNKNOWN"),
+            (["--ALLOW_AWS_READS"], "missing_value", "--ALLOW_AWS_READS"),
+            (["--ALLOW_AWS_READS=true", "--allow-aws-reads=false"], "duplicate_argument", "--allow-aws-reads"),
+            ([secret], "unrecognized_arguments", None),
+        ):
+            with self.subTest(extra=extra), patch("sys.stdout", new_callable=io.StringIO) as out, patch(
+                    "sys.stderr", new_callable=io.StringIO) as err:
+                try:
+                    preflight.parse_arguments(cli_args() + extra)
+                except preflight.PreflightArgumentError as exc:
+                    self.assertEqual(exc.code, 2)
+                    self.assertEqual(exc.diagnostic["reason"], reason)
+                    if option:
+                        self.assertIn(option, exc.diagnostic["arguments"])
+                    rendered = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+                    for output in (out.getvalue(), err.getvalue(), str(exc), rendered):
+                        self.assertNotIn(secret, output)
+                        self.assertNotIn(config()["account_id"], output)
+                        self.assertNotIn("invalid choice:", output)
+                    self.assertIn("PREFLIGHT_ARGUMENTS |", out.getvalue())
+                    self.assertIn("ARGUMENT_ERROR", err.getvalue())
+                    self.assertFalse(exc.diagnostic["values_logged"])
+                else:
+                    self.fail("Malformed argument unexpectedly accepted")
+
+    def test_missing_required_values_and_inline_duplicates_have_safe_names(self):
+        incomplete = cli_args()
+        index = incomplete.index("--EXPECTED_ACCOUNT_ID")
+        del incomplete[index:index + 2]
+        with patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(preflight.PreflightArgumentError) as caught:
+            preflight.parse_arguments(incomplete)
+        self.assertEqual(caught.exception.diagnostic["reason"], "missing_required_arguments")
+        self.assertIn("--EXPECTED_ACCOUNT_ID", caught.exception.diagnostic["arguments"])
+        for extra in (["--RUN_ID=private-duplicate"], ["--ALLOW_AWS_READS=true", "--ALLOW_AWS_READS=true"],
+                      ["--ALLOW_AWS_READS", "TRUE"], ["--ALLOW_AWS_READS="]):
+            with patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(preflight.PreflightArgumentError):
                 preflight.parse_arguments(cli_args() + extra)
 
     def test_missing_or_false_activation_never_reports_success_or_initializes_sdk(self):
