@@ -95,6 +95,9 @@ def inspect_sample_source(catalog_client, s3_client):
     file are checked; metadata fingerprints detect changes, not snapshot locks.
     """
     from datetime import datetime, timezone
+    import hashlib
+    import json
+    import re
     from sequence_manifest import _digest
     from sequence_s3 import inventory_s3_objects, SOURCE
     from sequence_source import fingerprint_source_inventory
@@ -124,8 +127,22 @@ def inspect_sample_source(catalog_client, s3_client):
         day = _iso_date(values[1], "partition date").isoformat()
         expected = SOURCE + "txn_date=" + day + "/"
         storage = partition.get("StorageDescriptor", {})
-        if storage.get("Location") != expected:
-            raise ValueError("Sample Catalog/S3 partition locations disagree")
+        actual = storage.get("Location")
+        if actual != expected:
+            details = dict(dataset="sample", txn_date=day, expected_location=expected,
+                           actual_location_type=type(actual).__name__)
+            if isinstance(actual, str):
+                details["actual_location_length"] = len(actual)
+                details["actual_location_sha256"] = hashlib.sha256(actual.encode("utf-8")).hexdigest()
+                # Show only recognizable group transaction-partition paths.
+                # JSON escapes whitespace; query strings, credentials and other
+                # arbitrary URI content are redacted. Never normalize for equality.
+                safe_path = (r"[ \t\r\n]*" + re.escape(SOURCE_ROOT)
+                    + r"dataset=(?:sample|HI-Medium|LI-Medium)/txn_date=[0-9]{4}-[0-9]{2}-[0-9]{2}/?[ \t\r\n]*")
+                details["actual_location"] = actual if re.fullmatch(safe_path, actual) else "<redacted unexpected URI>"
+            else:
+                details["actual_location"] = "<missing or non-string location>"
+            raise ValueError("Sample Catalog/S3 partition locations disagree: " + json.dumps(details, sort_keys=True))
         validate_catalog_table(dict(table, StorageDescriptor=dict(storage, Location=SOURCE_ROOT)))
         if "parquet" not in storage.get("InputFormat", "").lower():
             raise ValueError("Sample partition is not Parquet")

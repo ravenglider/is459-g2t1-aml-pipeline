@@ -118,6 +118,62 @@ import glue_sample_preflight
         reordered.partitions.reverse()
         self.assertEqual(snapshot["partitions_fingerprint"], adapter.inspect_sample_source(reordered, self.s3)["partitions_fingerprint"])
 
+    def test_six_literal_real_catalog_paths_are_accepted_without_normalization(self):
+        # Literal AWS Console evidence; independent of SOURCE/SOURCE_ROOT and
+        # fixture path construction so shared constant mistakes cannot mask drift.
+        locations = [
+            "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-01/",
+            "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-02/",
+            "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-03/",
+            "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-04/",
+            "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-05/",
+            "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-06/",
+        ]
+        from sequence_s3 import SOURCE
+        self.assertEqual(SOURCE, "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/")
+        client = FakeS3()
+        for partition, uri in zip(self.catalog.partitions, locations):
+            partition["StorageDescriptor"]["Location"] = uri
+            client.seed(uri.removeprefix("s3://is459-g2t1-aml-processed-bucket/") + "part.snappy.parquet")
+        original = deepcopy(self.catalog.partitions)
+        snapshot = adapter.inspect_sample_source(self.catalog, client)
+        self.assertEqual(snapshot["files"], [uri + "part.snappy.parquet" for uri in locations])
+        self.assertEqual(self.catalog.partitions, original)
+
+    def test_location_mismatch_identifies_date_and_exact_whitespace_without_relaxation(self):
+        expected = "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-03/"
+        for actual in (expected.rstrip("/"), expected + " ", "\t" + expected,
+                       expected.replace("dataset=sample", "dataset=HI-Medium"),
+                       expected.replace("2022-09-03", "2022-09-04")):
+            catalog = FakeCatalog()
+            catalog.partitions[2]["StorageDescriptor"]["Location"] = actual
+            with self.subTest(actual=actual), self.assertRaisesRegex(ValueError, "locations disagree") as caught:
+                adapter.inspect_sample_source(catalog, self.s3)
+            details = json.loads(str(caught.exception).split(": ", 1)[1])
+            self.assertEqual(details["txn_date"], "2022-09-03")
+            self.assertEqual(details["expected_location"], expected)
+            self.assertEqual(details["actual_location"], actual)
+            self.assertEqual(details["actual_location_length"], len(actual))
+            self.assertEqual(catalog.partitions[2]["StorageDescriptor"]["Location"], actual)
+            self.assertEqual(self.s3.calls, [])
+
+    def test_unexpected_location_values_are_redacted_and_still_rejected(self):
+        import hashlib
+        secret = "SYNTHETIC_PRIVATE_VALUE_DO_NOT_LOG"
+        for actual in ("s3://other-bucket/" + secret, "https://user:" + secret + "@example.invalid/",
+                       self.catalog.partitions[0]["StorageDescriptor"]["Location"] + "?token=" + secret,
+                       None, {"credentials": secret}):
+            catalog = FakeCatalog()
+            catalog.partitions[0]["StorageDescriptor"]["Location"] = actual
+            with self.assertRaisesRegex(ValueError, "locations disagree") as caught:
+                adapter.inspect_sample_source(catalog, self.s3)
+            self.assertNotIn(secret, str(caught.exception))
+            details = json.loads(str(caught.exception).split(": ", 1)[1])
+            self.assertEqual(details["actual_location_type"], type(actual).__name__)
+            self.assertEqual(details["txn_date"], "2022-09-01")
+            if isinstance(actual, str):
+                self.assertEqual(details["actual_location_sha256"], hashlib.sha256(actual.encode()).hexdigest())
+
     def test_missing_duplicate_unexpected_or_mislocated_partitions_fail(self):
         for kind in ("missing", "duplicate", "extra", "other_dataset", "location"):
             catalog = FakeCatalog()
