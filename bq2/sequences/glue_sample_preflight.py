@@ -175,9 +175,53 @@ class _SingleValue(argparse.Action):
         setattr(namespace, self.dest, values)
 
 
+class PreflightArgumentError(SystemExit):
+    """Exit code 2 plus redacted exception detail, even if stderr is unavailable."""
+    def __init__(self, diagnostic):
+        self.diagnostic = diagnostic
+        super().__init__(2)
+
+    def __str__(self):
+        return json.dumps(self.diagnostic, sort_keys=True)
+
+
+class _PreflightParser(argparse.ArgumentParser):
+    def fail(self, reason, names=(), unparsed_count=0):
+        # Only option NAMES; never raw argv, parser messages, values or evidence.
+        safe = []
+        for name in names:
+            if re.fullmatch(r"--[A-Za-z][A-Za-z0-9_-]{0,63}", name) and not re.search(r"(?:AKIA|ASIA)[A-Z0-9]{16}", name):
+                safe.append(name)
+            else:
+                safe.append("<redacted-option-name>")
+        diagnostic = dict(status="ARGUMENT_ERROR", reason=reason, arguments=sorted(set(safe)),
+                          unparsed_count=unparsed_count, preflight_completed=False, values_logged=False)
+        line = "PREFLIGHT_ARGUMENTS | " + json.dumps(diagnostic, sort_keys=True)
+        print(line, flush=True)
+        print(line, file=sys.stderr, flush=True)
+        # Suppress argparse.ArgumentError chaining: its text can contain values.
+        raise PreflightArgumentError(diagnostic) from None
+
+    def error(self, message):
+        # argparse's default invalid-choice/unknown messages include values.
+        # Derive only known option headers, then discard the original message.
+        if message.startswith("the following arguments are required:"):
+            tail = message.split(":", 1)[1]
+            names = [name.strip() for name in tail.split(",") if name.strip() in self._option_string_actions]
+            self.fail("missing_required_arguments", names)
+        if message.startswith("duplicate argument:"):
+            name = message.split(":", 1)[1].strip()
+            self.fail("duplicate_argument", [name] if name in self._option_string_actions else [])
+        match = re.match(r"argument ([^:]+):", message)
+        names = [name for name in match.group(1).split("/") if name in self._option_string_actions] if match else []
+        reason = "invalid_value" if "invalid choice:" in message else (
+            "missing_value" if "expected one argument" in message else "malformed_argument")
+        self.fail(reason, names)
+
+
 def parse_arguments(argv=None):
-    parser = argparse.ArgumentParser(description="Sample preflight; explicit opt-in required for any AWS reads",
-                                     allow_abbrev=False)
+    parser = _PreflightParser(prog="glue_sample_preflight", description="Sample preflight; explicit opt-in required for any AWS reads",
+                              allow_abbrev=False)
     for name in ("EXPECTED_ACCOUNT_ID", "RUN_ID", "TIMEZONE_EVIDENCE", "NO_REFRESH_EVIDENCE", "BUILDER_FINGERPRINT"):
         parser.add_argument("--" + name, required=True, action=_SingleValue)
     parser.add_argument("--NO_REFRESH_ACKNOWLEDGED", choices=("true", "false"), required=True, action=_SingleValue)
@@ -189,14 +233,28 @@ def parse_arguments(argv=None):
                         choices=("true", "false"), default="false", action=_SingleValue)
     # Glue may supply standard engine arguments. Only these known options are
     # tolerated; misspelled/custom unsafe arguments never silently disappear.
-    for name in ("JOB_ID", "JOB_RUN_ID", "SECURITY_CONFIGURATION", "TempDir", "extra-py-files", "job-bookmark-option",
-                 "job-language", "spark-event-logs-path", "scriptLocation", "endpoint", "mode"):
+    # Reserved options in awslabs/aws-glue-libs glue-5.0 utils.py/job.py plus
+    # documented Glue job arguments. Recognizing these does not configure Glue.
+    for name in ("JOB_ID", "JOB_RUN_ID", "SECURITY_CONFIGURATION", "TempDir", "RedshiftTempDir",
+                 "extra-py-files", "job-bookmark-option", "job-bookmark-from", "job-bookmark-to",
+                 "continuation-option", "encryption-type", "job-language", "spark-event-logs-path",
+                 "scriptLocation", "endpoint", "mode", "continuous-log-logGroup",
+                 "continuous-log-logStreamPrefix", "continuous-log-conversionPattern",
+                 "custom-logGroup-prefix", "custom-logStream-prefix"):
         parser.add_argument("--" + name)
     for name in ("enable-metrics", "enable-continuous-cloudwatch-log", "enable-job-insights",
-                 "enable-observability-metrics", "enable-spark-ui"):
-        parser.add_argument("--" + name, nargs="?", const="true", choices=("true", "false"))
+                 "enable-observability-metrics", "enable-spark-ui", "enable-continuous-log-filter",
+                 "enable-auto-scaling", "enable-s3-parquet-optimized-committer",
+                 "enable-rename-algorithm-v2", "enable-glue-datacatalog", "enable-data-lineage"):
+        parser.add_argument("--" + name, nargs="?", const="true", choices=("true", "false", ""))
     parser.add_argument("--conf", action="append")  # Spark legitimately accepts repeated configurations.
-    return parser.parse_args(argv)
+    parsed, unknown = parser.parse_known_args(argv)
+    if unknown:
+        # Unlike getResolvedOptions, do NOT discard arbitrary extras. Strip
+        # inline '=value' before emitting names; positional values stay redacted.
+        names = [token.split("=", 1)[0] for token in unknown if token.startswith("--")]
+        parser.fail("unrecognized_arguments", names, len(unknown))
+    return parsed
 
 
 def main(argv=None):

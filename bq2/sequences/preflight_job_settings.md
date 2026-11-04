@@ -1,4 +1,4 @@
-# Role 5 sample-only preflight: prepared locally, NOT deployed
+# Role 5 sample-only preflight: configuration and startup diagnostics
 
 This is a validation/candidate-profile job, not ETL, sequence generation, staging
 or publication. No deployment, artifact upload, AWS job/resource creation or run
@@ -62,6 +62,49 @@ engine flags support presence or explicit true/false and repeated `--conf` is
 allowed. Unknown custom arguments are rejected. If Glue injects an
 unsupported engine argument, inspect it and update the allowlist locally; do not
 silently ignore all unknown arguments.
+
+### Glue 5.0 argument compatibility and failure evidence
+
+The first real run reached argument parsing and exited with `SystemExit: 2`;
+the supplied traceback did not identify the token. An incomplete runtime
+allowlist is plausible, but missing values, invalid choices, duplicate Role 5
+arguments, or a different uploaded script remain possible. No specific option
+has been confirmed as the cause.
+
+The parser recognizes additional documented Glue options, including
+`--encryption-type`, `--RedshiftTempDir`, bookmark range/continuation options,
+continuous-log settings, optimized-committer flags and `--enable-glue-datacatalog`.
+These names are supported by the Glue 5.0 library source or AWS parameter
+documentation, not inferred from this failed run. Recognizing an engine argument
+does not enable its feature: keep the approved job settings unchanged, including
+the recommendation not to enable the Hive-metastore integration unnecessarily.
+
+Parsing uses `parse_known_args` only to identify leftovers; **every leftover
+still causes failure**. There is no arbitrary-unknown-argument bypass.
+Role 5 required fields, exact lowercase activation, duplicate checks and
+sample/account/region restrictions remain enforced.
+
+On parsing failure, search both driver output/error logs for:
+
+```text
+PREFLIGHT_ARGUMENTS | {"status":"ARGUMENT_ERROR", ...}
+```
+
+The structured record includes a reason (`missing_required_arguments`,
+`missing_value`, `invalid_value`, `duplicate_argument`, `unrecognized_arguments`
+or `malformed_argument`), option names, and `preflight_completed=false`. It
+never prints raw argv, option values, evidence strings or credentials. The
+exception also contains this redacted diagnostic, so a traceback remains useful
+when the original stderr message is missing. Argparse exception chaining is
+suppressed because its default error text can contain sensitive values.
+
+After a failure, inspect the named arguments locally. Do not broaden the parser
+to ignore all unknown options or retry paid runs automatically. Each source
+change requires a new tested entry script/ZIP release and new hashes.
+
+References: [AWS job parameters](https://docs.aws.amazon.com/glue/latest/dg/aws-glue-programming-etl-glue-arguments.html),
+[Glue 5.0 argument resolver](https://github.com/awslabs/aws-glue-libs/blob/glue-5.0/awsglue/utils.py),
+[Glue 5.0 reserved options](https://github.com/awslabs/aws-glue-libs/blob/glue-5.0/awsglue/job.py).
 
 ## What the future run reads and checks
 
