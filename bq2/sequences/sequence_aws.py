@@ -128,7 +128,9 @@ def inspect_sample_source(catalog_client, s3_client):
         expected = SOURCE + "txn_date=" + day + "/"
         storage = partition.get("StorageDescriptor", {})
         actual = storage.get("Location")
-        if actual != expected:
+        # Glue's API may omit the final separator. Accept exactly these two
+        # spellings; do not trim whitespace, repeated slashes or other segments.
+        if actual not in (expected, expected[:-1]):
             details = dict(dataset="sample", txn_date=day, expected_location=expected,
                            actual_location_type=type(actual).__name__)
             if isinstance(actual, str):

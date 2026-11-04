@@ -142,7 +142,7 @@ import glue_sample_preflight
 
     def test_location_mismatch_identifies_date_and_exact_whitespace_without_relaxation(self):
         expected = "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-03/"
-        for actual in (expected.rstrip("/"), expected + " ", "\t" + expected,
+        for actual in (expected + " ", "\t" + expected,
                        expected.replace("dataset=sample", "dataset=HI-Medium"),
                        expected.replace("2022-09-03", "2022-09-04")):
             catalog = FakeCatalog()
@@ -156,6 +156,43 @@ import glue_sample_preflight
             self.assertEqual(details["actual_location_length"], len(actual))
             self.assertEqual(catalog.partitions[2]["StorageDescriptor"]["Location"], actual)
             self.assertEqual(self.s3.calls, [])
+
+    def test_six_actual_slashless_glue_api_paths_and_mixed_equivalents(self):
+        locations = [
+            "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-01",
+            "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-02",
+            "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-03",
+            "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-04",
+            "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-05",
+            "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-06",
+        ]
+        for suffixes in ([""] * 6, ["/"] * 6, ["", "/"] * 3):
+            catalog = FakeCatalog()
+            for partition, uri, suffix in zip(catalog.partitions, locations, suffixes):
+                partition["StorageDescriptor"]["Location"] = uri + suffix
+            original = deepcopy(catalog.partitions)
+            snapshot = adapter.inspect_sample_source(catalog, self.s3)
+            self.assertEqual(snapshot["dates"], list(adapter.SAMPLE_DATES))
+            self.assertEqual(snapshot["files"], [uri + "/part.snappy.parquet" for uri in locations])
+            self.assertEqual(catalog.partitions, original)
+
+    def test_trailing_separator_compatibility_does_not_normalize_malformed_paths(self):
+        expected = "s3://is459-g2t1-aml-processed-bucket/transactions_clean/dataset=sample/txn_date=2022-09-01"
+        for actual in (expected + "//", expected + "/extra/", expected + " ", expected + "/\n",
+                       expected + "?token=PRIVATE_VALUE", expected + "/#fragment",
+                       expected.replace("is459-g2t1-aml-processed-bucket", "other-bucket"),
+                       expected.replace("dataset=sample", "dataset=LI-Medium"),
+                       expected.replace("2022-09-01", "2022-09-02"),
+                       expected.replace("dataset=sample", "dataset%3Dsample")):
+            catalog = FakeCatalog()
+            catalog.partitions[0]["StorageDescriptor"]["Location"] = actual
+            with self.subTest(actual=actual), self.assertRaisesRegex(ValueError, "locations disagree") as caught:
+                adapter.inspect_sample_source(catalog, self.s3)
+            details = json.loads(str(caught.exception).split(": ", 1)[1])
+            self.assertEqual(details["txn_date"], "2022-09-01")
+            self.assertEqual(details["expected_location"], expected + "/")
+            self.assertNotIn("PRIVATE_VALUE", str(caught.exception))
+            self.assertEqual(catalog.partitions[0]["StorageDescriptor"]["Location"], actual)
 
     def test_unexpected_location_values_are_redacted_and_still_rejected(self):
         import hashlib
