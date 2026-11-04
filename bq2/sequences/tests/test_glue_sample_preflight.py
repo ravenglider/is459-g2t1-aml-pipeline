@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from datetime import datetime, timezone
+import ast
 import io
 import json
 from pathlib import Path
@@ -453,6 +454,42 @@ import glue_sample_preflight
             with self.assertRaisesRegex(ValueError, "Wrong AWS account"):
                 preflight.main(argv)
             context_type.assert_not_called()
+
+
+class ScriptEntryTests(unittest.TestCase):
+    """Execute the actual script guard without constructing a cloud runtime."""
+
+    def execute_guard(self, main):
+        path = Path(preflight.__file__)
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        guard = tree.body[-1]
+        self.assertIsInstance(guard, ast.If)
+        self.assertEqual(ast.unparse(guard.test), "__name__ == '__main__'")
+        # Use the real, unmodified guard AST; only main's cloud boundary is mocked.
+        namespace = {"__name__": "__main__", "main": main}
+        exec(compile(ast.Module(body=[guard], type_ignores=[]), str(path), "exec"), namespace)
+        main.assert_called_once_with()
+
+    def test_success_returns_normally_without_system_exit(self):
+        self.execute_guard(MagicMock(return_value=0))
+
+    def test_disabled_reads_nonzero_return_remains_failure(self):
+        with self.assertRaises(SystemExit) as caught:
+            self.execute_guard(MagicMock(return_value=2))
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_argument_failure_propagates(self):
+        failure = preflight.PreflightArgumentError({"status": "ARGUMENT_ERROR"})
+        with self.assertRaises(preflight.PreflightArgumentError) as caught:
+            self.execute_guard(MagicMock(side_effect=failure))
+        self.assertIs(caught.exception, failure)
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_preflight_failure_propagates(self):
+        failure = preflight.PreflightFailure({"status": "FAILED", "error": {"message": "invalid sample"}})
+        with self.assertRaises(preflight.PreflightFailure) as caught:
+            self.execute_guard(MagicMock(side_effect=failure))
+        self.assertIs(caught.exception, failure)
 
 
 class RuntimeVersionTests(unittest.TestCase):
