@@ -25,6 +25,8 @@ def argv():
         NO_REFRESH_ACKNOWLEDGED="true",ALLOW_AWS_WRITES="true",MAX_PAIR_CANDIDATES="751390",
         MAX_PAIR_LINKS="100000",MAX_PROJECTED_TRIPLES="100000",MAX_TRIPLES_PER_MIDDLE="10000",
         MAX_OUTPUT_ROWS="200000",MAX_RECORDS_PER_FILE="10000")
+    values.update({"additional-python-modules":entry.SCRIPT_ROOT+"sample_generation_release_1/role5_sdk.gluewheels.zip",
+                   "python-modules-installer-option":"--no-index"})
     return [token for name,value in values.items() for token in ("--"+name,value)]
 
 
@@ -106,7 +108,7 @@ class ArgumentTests(unittest.TestCase):
 
     def test_unknown_paths_test_hooks_dependencies_and_spark_settings_rejected(self):
         for name in ("SOURCE_TABLE","DATABASE","INPUT_DATES","STAGING_ROOT","DESTINATION","SYNTHETIC_BASELINE",
-                     "transport","conf","additional-python-modules","ALLOW_AWS_W","help"):
+                     "transport","conf","ALLOW_AWS_W","help"):
             with self.subTest(name=name),patch("sys.stdout",new_callable=io.StringIO),patch("sys.stderr",new_callable=io.StringIO),self.assertRaises(entry.GenerationArgumentError):
                 entry.parse_arguments(argv()+["--"+name,"private-value"])
 
@@ -139,6 +141,80 @@ class ArgumentTests(unittest.TestCase):
             with self.assertRaises(entry.GenerationArgumentError) as caught:entry.parse_arguments(argv()+["--UNKNOWN="+secret])
         self.assertNotIn(secret,out.getvalue()+err.getvalue()+str(caught.exception))
         self.assertFalse(caught.exception.diagnostic["values_logged"])
+
+    def test_sdk_bootstrap_arguments_accept_both_forms_and_orders(self):
+        names=("additional-python-modules","python-modules-installer-option")
+        original=argv()
+        base=original[:-4]
+        values={name:original[original.index("--"+name)+1] for name in names}
+        for order in (names,tuple(reversed(names))):
+            for inline_sdk in (False,True):
+                for inline_installer in (False,True):
+                    args=list(base)
+                    for name in order:
+                        inline=inline_sdk if name==names[0] else inline_installer
+                        args.extend(["--"+name+"="+values[name]] if inline else ["--"+name,values[name]])
+                    with self.subTest(order=order,sdk=inline_sdk,installer=inline_installer):
+                        parsed=entry.parse_arguments(args)
+                        self.assertEqual(parsed.additional_python_modules,values[names[0]])
+                        self.assertEqual(parsed.python_modules_installer_option,"--no-index")
+                        self.assertEqual(entry.validate_arguments(parsed),settings())
+                        # argv=None must use the same narrow normalization as explicit argv.
+                        with patch("sys.argv",["glue_sample_generation.py",*args]):
+                            self.assertEqual(entry.validate_arguments(entry.parse_arguments()),settings())
+
+    def test_sdk_missing_duplicate_and_malformed_arguments_never_create_dependencies(self):
+        sdk="additional-python-modules"
+        installer="python-modules-installer-option"
+        cases=[changed(sdk,remove=True),changed(installer,remove=True),argv()[:-4]]
+        for name in (sdk,installer):
+            # Missing value, spaced duplicate and mixed-form duplicate.
+            cases.extend([changed(name,remove=True)+["--"+name],
+                argv()+["--"+name,argv()[argv().index("--"+name)+1]],
+                argv()+["--"+name+"="+argv()[argv().index("--"+name)+1]]])
+        for value in ("", "--index-url", "--no-index=true", "--no-deps", "--no-index --no-deps", " --no-index"):
+            cases.append(changed(installer,value))
+        for suffix in ("release/role5_modules.zip","release/role5_sdk.zip","release/role5_sdk.gluewheels.zip/",
+                       "../role5_sdk.gluewheels.zip","release/sub/role5_sdk.gluewheels.zip",
+                       "%72elease/role5_sdk.gluewheels.zip","release/role5_sdk.gluewheels.zip?token=private",
+                       "release/role5_sdk.gluewheels.zip#fragment","release//role5_sdk.gluewheels.zip",
+                       "release.name/role5_sdk.gluewheels.zip", "a"*65+"/role5_sdk.gluewheels.zip"):
+            cases.append(changed(sdk,entry.SCRIPT_ROOT+suffix))
+        for value in ("boto3==1.35.93", "s3://other/scripts/role5/release/role5_sdk.gluewheels.zip",
+                      "https://is459-g2t1-aml-athena-bucket/scripts/role5/release/role5_sdk.gluewheels.zip",
+                      entry.SCRIPT_ROOT+"release/role5_sdk.gluewheels.zip,boto3==1.35.93",
+                      " "+entry.SCRIPT_ROOT+"release/role5_sdk.gluewheels.zip",
+                      entry.SCRIPT_ROOT+"release/role5_sdk.gluewheels.zip\n"):
+            cases.append(changed(sdk,value))
+        cases.extend([argv()+["--conf","spark.any=value"],argv()+["--no-index"],
+                      argv()+["--python-modules-installer-options=--no-index"],
+                      argv()+["--extra-py-files",entry.SCRIPT_ROOT+"release/role5_sdk.gluewheels.zip"],
+                      argv()+["--extra-py-files",entry.SCRIPT_ROOT+"release/role5_modules.zip,other.zip"],
+                      changed(installer,remove=True)+["--python-modules-installer-option","--UNKNOWN=value"]])
+        deps=dependencies()
+        modules,sdk_module,context_type,job_type,spark_type,_=fake_modules(deps)
+        with patch.dict(sys.modules,modules),patch.object(entry,"_initialize_dependencies") as initialize, \
+             patch("sys.stdout",new_callable=io.StringIO),patch("sys.stderr",new_callable=io.StringIO):
+            for args in cases:
+                with self.subTest(args=args),self.assertRaises((ValueError,entry.GenerationArgumentError)):
+                    entry.main(args)
+            initialize.assert_not_called()
+        sdk_module.Session.assert_not_called()
+        context_type.assert_not_called()
+        spark_type.getOrCreate.assert_not_called()
+        job_type.assert_not_called()
+
+    def test_sdk_values_stay_out_of_safe_argument_diagnostics(self):
+        secret="private-sdk-configuration"
+        cases=[changed("python-modules-installer-option",secret),
+               argv()+["--additional-python-modules="+secret],
+               changed("additional-python-modules",entry.SCRIPT_ROOT+secret+"/wrong.zip")]
+        with patch("sys.stdout",new_callable=io.StringIO) as out,patch("sys.stderr",new_callable=io.StringIO) as err:
+            for args in cases:
+                with self.assertRaises((ValueError,entry.GenerationArgumentError)) as caught:
+                    entry.main(args)
+                self.assertNotIn(secret,str(caught.exception))
+        self.assertNotIn(secret,out.getvalue()+err.getvalue())
 
 
 class RuntimeTests(unittest.TestCase):

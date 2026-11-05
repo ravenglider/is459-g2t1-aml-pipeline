@@ -67,10 +67,26 @@ def parse_arguments(argv=None):
         parser.add_argument("--"+name, nargs="?", const="true", choices=("true", "false", ""), action=_SingleValue)
     for name in ("enable-auto-scaling", "enable-spark-ui"):
         parser.add_argument("--"+name, choices=("false",), action=_SingleValue)
+    # Glue installs the separate SDK bundle during bootstrap, never in Python.
+    parser.add_argument("--additional-python-modules", action=_SingleValue)
+    parser.add_argument("--python-modules-installer-option", choices=("--no-index",), action=_SingleValue)
     for name in ("glue-di-packages-correlation-ids", "internal-lib-urls", "tenant-internal"):
         parser.add_argument("--"+name, nargs="?", action=_OpaqueRuntimeValue, default=argparse.SUPPRESS)
-    # No --conf, dependency installation, path overrides or synthetic test options.
-    args, unknown = parser.parse_known_args(argv)
+    # argparse otherwise mistakes this one reviewed option-like value for a flag.
+    # Do not generalize to arbitrary installer switches or unknown arguments.
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    normalized = []
+    index = 0
+    while index < len(tokens):
+        if (tokens[index] == "--python-modules-installer-option" and index + 1 < len(tokens)
+                and tokens[index + 1] == "--no-index"):
+            normalized.append("--python-modules-installer-option=--no-index")
+            index += 2
+        else:
+            normalized.append(tokens[index])
+            index += 1
+    # No --conf, arbitrary dependencies, path overrides or synthetic test options.
+    args, unknown = parser.parse_known_args(normalized)
     if unknown:
         parser.fail("unrecognized_arguments", [v.split("=", 1)[0] for v in unknown if v.startswith("--")], len(unknown))
     return args
@@ -81,6 +97,13 @@ def validate_arguments(args):
     if args.ALLOW_AWS_WRITES != "true":
         raise GenerationArgumentError(dict(status="NOT_RUN", reason="write_activation_required",
             generation_completed=False, values_logged=False))
+    if args.additional_python_modules is None or args.python_modules_installer_option is None:
+        raise GenerationArgumentError(dict(status="ARGUMENT_ERROR", reason="sdk_dependency_arguments_required",
+            generation_completed=False, values_logged=False))
+    sdk_pattern = re.escape(SCRIPT_ROOT)+r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}/role5_sdk\.gluewheels\.zip"
+    if (re.fullmatch(sdk_pattern, args.additional_python_modules) is None
+            or args.python_modules_installer_option != "--no-index"):
+        raise ValueError("Only the approved versioned SDK bundle and offline installer option are allowed")
     from sequence_sample_run import create_staging_run
     def positive(name):
         value = getattr(args, name.replace("-", "_"))
