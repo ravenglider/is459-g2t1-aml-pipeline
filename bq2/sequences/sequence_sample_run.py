@@ -1,6 +1,6 @@
 """Bounded sample staging-run evidence only, never a publication manifest.
 
-Injected S3 storage; no clients/Spark creation, generation or B1 execution.
+Injected S3 storage and explicitly gated B1 coordination; no clients/Spark creation.
 Receipt and generation evidence are attestations, not proof of a transactional
 snapshot or completeness of the underlying HI/LI data. Terminal success means
 staging only. Failed/incomplete attempts must be preserved for diagnosis.
@@ -246,3 +246,82 @@ def read_staging_run_s3(client, run_id):
     if value["run_id"] != run_id:
         raise ValueError("Stored run identity mismatch")
     return value, etag
+
+
+def coordinate_staging_run(config, attempt_id, max_records_per_file, *, owner_token,
+                           builder_version, allow_writes=False, destination="development",
+                           glue_context, catalog_client, s3_client, identity_client, transport=None):
+    """Persist CREATED, run B1, then durably verify staging-only completion.
+
+    No automatic resume or retries. An uncertain/failed terminal verification
+    raises even if S3 might contain terminal success: investigate, do not overwrite.
+    Only exact known owned nonterminal versions may be marked FAILED. The original
+    exception always propagates if recording failure is unsafe or also fails.
+    """
+    if allow_writes is not True:
+        raise ValueError("Explicit boolean True write activation required")
+    if destination != "development":
+        raise ValueError("Only development staging is allowed")
+    current = create_staging_run(config, attempt_id, max_records_per_file,
+        owner_token=owner_token, builder_version=builder_version)
+    config = current["config"]
+    # Metadata is an AWS write too: verify injected account/region before CREATED.
+    for client in (catalog_client, s3_client, identity_client):
+        if client.meta.region_name != "us-east-1":
+            raise ValueError("Client region must be us-east-1")
+    if identity_client.get_caller_identity().get("Account") != config["account_id"]:
+        raise ValueError("Wrong AWS account")
+    from sequence_sample_staging import stage_bounded_sample
+    from sequence_aws import inspect_sample_source
+    from sequence_sample_generation import FINGERPRINTS
+
+    def verify(expected, expected_etag):
+        observed, observed_etag = read_staging_run_s3(s3_client, current["run_id"])
+        if observed_etag != expected_etag or _bytes(observed) != _bytes(expected):
+            raise ValueError("Durable staging-run verification conflict")
+
+    # Creation errors are deliberately outside the failure handler: an existing
+    # run or unresolved creation must never be taken over to record our failure.
+    etag = write_staging_run_s3(s3_client, current)
+    verify(current, etag)
+    known = [(deepcopy(current), etag)]
+    try:
+        staged = stage_bounded_sample(config, attempt_id, max_records_per_file,
+            allow_writes=True, destination="development", glue_context=glue_context,
+            catalog_client=catalog_client, s3_client=s3_client, identity_client=identity_client,
+            transport=transport)
+        if (staged.attempt_uri != current["attempt_uri"]
+                or staged.report.get("status") != "STAGED_GENERATION_COMPLETE"
+                or staged.report.get("published") is not False
+                or staged.report.get("run_manifest_ready") is not False):
+            raise ValueError("B1 did not return matching completed staging evidence")
+        receipt = _load_validated(s3_client, current["attempt_uri"])
+        pending = transition_staging_run(current, "STAGING", generation=staged.report.get("generation"), receipt=receipt)
+        known.append((deepcopy(pending), None))
+        next_etag = write_staging_run_s3(s3_client, pending, expected_revision=current["revision"], expected_etag=etag)
+        verify(pending, next_etag)
+        current, etag = pending, next_etag
+        known.append((deepcopy(current), etag))
+        inventory = inspect_sample_source(catalog_client, s3_client)
+        source = {key: inventory[key] for key in FINGERPRINTS}
+        pending = transition_staging_run(current, "STAGED_VALIDATED", current_source=source)
+        known.append((deepcopy(pending), None))
+        next_etag = write_staging_run_s3(s3_client, pending, expected_revision=current["revision"],
+            expected_etag=etag, current_source=source)
+        verify(pending, next_etag)
+        return dict(manifest_uri=pending["manifest_uri"], attempt_uri=pending["attempt_uri"],
+            manifest=deepcopy(pending), etag=next_etag, published=False)
+    except BaseException as original:
+        try:
+            observed, observed_etag = read_staging_run_s3(s3_client, current["run_id"])
+            if (observed["state"] not in ("CREATED", "STAGING")
+                    or not any(_bytes(observed) == _bytes(version)
+                        and (tag is None or tag == observed_etag) for version, tag in known)):
+                raise ValueError("Failure recording unsafe: conflicting, unknown or terminal run state")
+            failed = transition_staging_run(observed, "FAILED", error="Coordinator failure: "+type(original).__name__)
+            failure_etag = write_staging_run_s3(s3_client, failed,
+                expected_revision=observed["revision"], expected_etag=observed_etag)
+            verify(failed, failure_etag)
+        except BaseException as recording_error:
+            original.add_note("FAILED recording not confirmed ("+type(recording_error).__name__+"); preserve run and attempt for investigation")
+        raise
