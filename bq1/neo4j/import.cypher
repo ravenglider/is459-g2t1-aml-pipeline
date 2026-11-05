@@ -6,6 +6,14 @@
 // Paths below are specifically the accepted HI files, not sample or LI.
 // A changed source requires a NEW scope AND matching file paths.
 // No DELETE statements: historical scoped nodes are preserved.
+// Manual reuse (run selected statements only; never execute this whole record):
+// sample-01: use file:///bank_edges.csv and file:///transactions.csv.
+// li-01: replace file:///hi-01/ with file:///li-01/ in the TWO LOAD CSVs.
+// hi-uncapped-01: replace path with file:///hi-uncapped-01/ and run BANK import
+// only. This comparison has no account CSV; skip account import/reconciliation.
+// Keep $scope identical to the selected folder. Uncapped bank acceptance:
+// 5166 banks,29660 corridors,34887 represented transactions,USD131229225009.70.
+// Staging and algorithm definitions are in ec2_setup.md and queries.cypher.
 
 // Before switching Active labels, drop snapshots; serialize with other runs.
 CALL gds.graph.drop('role4Directed', false);

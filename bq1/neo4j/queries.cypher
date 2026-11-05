@@ -107,6 +107,14 @@ MATCH p=(:ActiveBank {scope:'hi-01',bank_id:'20'})-[:LAUNDERING_TO]->
 RETURN p;
 
 // TASK 7: one link per unordered bank pair, combined transaction-count weight.
+// The TASK 6/7 projection, estimate, write and pair-link statements operate on
+// ActiveBank and were also used for LI and uncapped HI after scope verification.
+// Scope-specific ranking/membership/export queries below are accepted HI records;
+// use $scope or the intended literal when examining another saved population.
+// Observed LI: 4924 banks,13724 directed corridors;13453 pairs/weight15782;
+// Louvain142,modularity0.45376073179686327,4924 assignments.
+// Observed uncapped HI:5166 banks,29660 corridors;28622 pairs/weight34887;
+// Louvain111,modularity0.3596721194379274,5166 assignments.
 MATCH (a:ActiveBank)-[r:LAUNDERING_TO]->(b:ActiveBank)
 WITH CASE WHEN a.bank_id<b.bank_id THEN a ELSE b END AS lo,
      CASE WHEN a.bank_id<b.bank_id THEN b ELSE a END AS hi,

@@ -88,6 +88,46 @@ The import bind mount must be writable at container startup because this image c
 
 HI files are under `import/hi-01/`; their Neo4j URLs are `file:///hi-01/bank_edges.csv` and `file:///hi-01/transactions.csv`. Sample files were kept separately. The database has scope-qualified Bank and Account uniqueness constraints; never mix a new CSV population into an accepted scope.
 
+## Resume and stage input files
+
+Use Session Manager on the running shared instance. Check `sudo docker ps -a`;
+run `sudo docker start role4-neo4j` only if the existing container is Exited.
+Do not recreate it. The following staging loop replaces repeated per-file steps.
+It stages existing S3 objects; it does not import graph data.
+
+```bash
+graph_input_scope='li-01'  # select intended scope before running
+graph_input_files=(bank_edges.csv transactions.csv)
+# Bank-only cutoff comparison:
+# graph_input_scope='hi-uncapped-01'
+# graph_input_files=(bank_edges.csv)
+sudo mkdir -p "$HOME/role4/import/$graph_input_scope"
+sudo chmod 755 "$HOME/role4/import/$graph_input_scope"
+for graph_input_file in "${graph_input_files[@]}"; do
+  sudo aws s3 cp \
+    "s3://is459-g2t1-aml-processed-bucket/bq1_graph_edges/$graph_input_scope/$graph_input_file" \
+    "$HOME/role4/import/$graph_input_scope/$graph_input_file" --region us-east-1 || break
+  sudo chmod 644 "$HOME/role4/import/$graph_input_scope/$graph_input_file" || break
+  sudo docker exec --user 7474 role4-neo4j \
+    head -n 1 "/var/lib/neo4j/import/$graph_input_scope/$graph_input_file" || break
+  sudo wc -l "$HOME/role4/import/$graph_input_scope/$graph_input_file" || break
+done
+```
+
+Run in Bash; stop on any error. Choose scope and file list before creating the
+directory or starting the loop. Do not overwrite accepted inputs with a refreshed
+source. Routine headers/counts do not need additional screenshots.
+
+| Input | Bank CSV lines including header | Transaction CSV lines including header |
+|---|---:|---:|
+| Accepted HI | 29,375 | 34,892 |
+| Accepted LI | 13,725 | 15,893 |
+| Uncapped HI | 29,661 | Not exported: bank-only comparison |
+
+Headers must match `BANK_HEADER`/`TX_HEADER` in `run_graph.py`. Counts/readability
+are preliminary checks; reconcile actual graph counts/USD against Athena using
+the selected import statements. All three populations were staged manually.
+
 ## Connection and verification
 
 Security-group inbound TCP 7474 and 7687 are restricted to the user's current public IPv4 `/32` (console **My IP**), not the EC2 instance's IP. Preserve other team rules. Use Session Manager for terminal access. Browser connects to `http://EC2_PUBLIC_IP:7474` and Bolt on port 7687; the public IP can change after stopping/starting EC2.
@@ -98,8 +138,6 @@ In Session Manager:
 bash
 sudo docker ps -a
 sudo docker logs --tail 50 role4-neo4j
-sudo docker exec --user 7474 role4-neo4j head -n 1 /var/lib/neo4j/import/hi-01/bank_edges.csv
-sudo docker exec --user 7474 role4-neo4j head -n 1 /var/lib/neo4j/import/hi-01/transactions.csv
 ```
 
 In Neo4j Browser, run separately:
@@ -116,7 +154,7 @@ RETURN name;
 
 The configured heap is 1 GiB and container cap 2.5 GiB; host free RAM is not all usable GDS heap. Inspect graph/algorithm estimates before running. The Python runner additionally limits algorithm estimates to a configurable budget but does not replace live capacity checks.
 
-On 3 November 2026 the team approved Neo4j Browser instead of Bloom for the final visuals, as reported by the user. Use the existing Browser connection; no Bloom installation/licence is needed for the agreed route. The three final scenes/captions remain pending. Record the proposal-tool change in the report/slides.
+On 3 November 2026 the team approved Neo4j Browser instead of Bloom for the final visuals, as reported by the user. Use the existing Browser connection; no Bloom installation/licence is needed for the agreed route. Three final scenes are saved as 08p-08r and captioned in findings.md. Record the proposal-tool change in the report/slides.
 
 ## Evidence and stopping
 
