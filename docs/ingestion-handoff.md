@@ -123,24 +123,29 @@ is459-g2t1-aml-processed-bucket/
 | Input          | `{}`                                                                                                                    |
 | Last run       | 2 Nov 2026, Succeeded (ETL and BQ1 live)                                                                                |
 
-### 2.7 EC2 (ingestion only)
+### 2.7 EC2 (ingestion, shared Neo4j host)
 
-| Item           | Value                                                                          |
-| -------------- | ------------------------------------------------------------------------------ |
-| Instance       | `is459-g2t1-ingest` (Amazon Linux 2023, 50 GiB gp3)                            |
-| Security group | `sg-05691ad89519d37c6 - launch-wizard-6` (inbound SSH 22 from owner’s IP only) |
-| IAM role       | `is459-g2t1-ec2-s3-role` (`AmazonS3FullAccess`)                                |
-| State          | **Stopped.** Only restart to re-download data or record the setup video        |
+| Item                  | Value                                                                                                                            |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Instance              | `is459-g2t1-ingest` / `i-0125056b848e5634a` (Amazon Linux 2023, 50 GiB gp3)                                                      |
+| Instance type         | `t3.medium` (resized from `t3.small`)                                                                                            |
+| Used by               | Role 1: one-off Kaggle download. Role 4: Neo4j graph analysis                                                                    |
+| Neo4j                 | Docker container `role4-neo4j`, Neo4j 5.26.32 Community with GDS, persistent volumes `role4-data`, `role4-logs`, `role4-plugins` |
+| Role 4 work directory | `/home/ssm-user/role4/` (credentials in a protected `.env`, never in Git)                                                        |
+| Security group        | `sg-05691ad89519d37c6 - launch-wizard-6`: SSH 22 from Sonia's IP; Neo4j 7474 and 7687 from Role 4's IP only                      |
+| Access                | Session Manager (no shared `.pem` needed)                                                                                        |
+| IAM role              | `is459-g2t1-ec2-s3-role` (see 2.8)                                                                                               |
+| State                 | **Stop when idle.** Coordinate with Role 4 before starting or stopping.                                                          |
 
 ### 2.8 IAM roles summary
 
-| Role                                | Used by                                     | Policies                                                                                    |
-| ----------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `AWSGlueServiceRole-is459g2t1`      | Glue crawlers, **and teammates’ Glue jobs** | Glue-generated policy, `AmazonS3ReadOnlyAccess`, `AmazonS3FullAccess`                       |
-| `is459-g2t1-fetch-fxbtc-rates-role` | Lambda                                      | Basic execution, `AmazonS3FullAccess`                                                       |
-| `is459-g2t1-ec2-s3-role`            | EC2 ingest instance                         | `AmazonS3FullAccess`                                                                        |
-| `is459-g2t1-reset-outputs-role-*`   | Reset outputs Lambda                        | Basic execution, `AmazonS3FullAccess`, `AWSGlueConsoleFullAccess`                           |
-| Step Functions auto-created role    | State machine                               | `AWSGlueConsoleFullAccess`, `AWSLambdaRole`, `AmazonAthenaFullAccess`, `AmazonS3FullAccess` |
+| Role                                | Used by                                     | Policies                                                                                                                                                                              |
+| ----------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AWSGlueServiceRole-is459g2t1`      | Glue crawlers, **and teammates’ Glue jobs** | Glue-generated policy, `AmazonS3ReadOnlyAccess`, `AmazonS3FullAccess`                                                                                                                 |
+| `is459-g2t1-fetch-fxbtc-rates-role` | Lambda                                      | Basic execution, `AmazonS3FullAccess`                                                                                                                                                 |
+| `is459-g2t1-ec2-s3-role`            | EC2 instance (ingest, now Neo4j)            | `AmazonS3FullAccess`, `AmazonSSMManagedInstanceCore`, inline `is459-g2t1-neo4j-athena-glue` (Athena on primary workgroup; Glue read, create, update, delete tables in is459_g2t1_aml) |
+| `is459-g2t1-reset-outputs-role-*`   | Reset outputs Lambda                        | Basic execution, `AmazonS3FullAccess`, `AWSGlueConsoleFullAccess`                                                                                                                     |
+| Step Functions auto-created role    | State machine                               | `AWSGlueConsoleFullAccess`, `AWSLambdaRole`, `AmazonAthenaFullAccess`, `AmazonS3FullAccess`                                                                                           |
 
 > **Note for Roles 2 to 6:** `AWSGlueServiceRole-is459g2t1` can read and write S3. Use it as the IAM role for your Glue jobs. Write outputs only to `is459-g2t1-aml-processed-bucket`.
 
