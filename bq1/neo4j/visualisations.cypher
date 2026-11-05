@@ -1,7 +1,7 @@
-// Role 4 final-scene source. PREPARED, not yet executed or captured as final scenes.
+// Role 4 final-scene source. Executed manually on hi-01; scenes saved as 08p-08r.
 // Run one statement at a time after confirming the accepted HI scope is active.
 // Team decision reported 3 November 2026: use Neo4j Browser instead of Bloom.
-// These queries support the agreed Browser route; final scenes are not captured.
+// Scene C caption data verified: 05:10/13:24 on 2022-09-06, attempt 2 on both.
 // Record the proposal-tool substitution in the report/slides. No Bloom licence
 // or perspective export is required for this agreed route.
 

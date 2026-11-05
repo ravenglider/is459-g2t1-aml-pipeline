@@ -1,4 +1,4 @@
--- Role 4 sensitivity sources. All five SELECTs executed successfully in Athena.
+-- Role 4 sensitivity sources. All six SELECTs executed successfully in Athena.
 -- Query 1 ID: 679b8d6e-083d-4d27-90ab-d72cc0d72d1c.
 -- Query 2: all four population counts match; all quality counts zero.
 -- Query 2 ID: cf3afa7b-c85c-4f3b-883a-f34dc08d1543.
@@ -117,8 +117,20 @@ GROUP BY dataset ORDER BY dataset;
 
 -- For LI graph rerun: use export_edges.sql with dataset LI-Medium, a fresh li
 -- input prefix/scope and the same <20M convention. Do not mix exports/runs.
--- For an uncapped graph: first pass the unfiltered quality checks above; make a
--- versioned copy of BOTH input SELECTs and reconciliation with the cutoff
--- removed, save that actual SQL/query IDs, and import into a NEW scope.
+-- The completed uncapped comparison is BANK-ONLY; no account CSV is needed.
 -- The current Python runner intentionally enforces <20M and must NOT be used
 -- for an uncapped run without a separately reviewed/tested implementation.
+
+-- 6. Actual uncapped HI bank export. Executed; 29660 rows.
+-- Query ID: 7c2e2f42-8bd3-4f32-b924-ade41416f735.
+-- Save complete CSV as bq1_graph_edges/hi-uncapped-01/bank_edges.csv.
+SELECT CAST(from_bank AS VARCHAR) AS from_bank,
+       CAST(to_bank AS VARCHAR) AS to_bank,
+       COUNT(*) AS laundering_txns,
+       SUM(amount_paid_usd) AS laundering_usd
+FROM is459_g2t1_aml.transactions_clean
+WHERE dataset = 'HI-Medium'
+  AND is_laundering = 1
+  AND cross_bank = 1
+GROUP BY from_bank, to_bank
+ORDER BY from_bank, to_bank;
