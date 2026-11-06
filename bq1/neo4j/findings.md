@@ -2,7 +2,7 @@
 
 Owner: Role 4. Manual run validated on 3 November 2026. BQ1: Which bank pairs are most involved in laundering, and which should prioritise information sharing?
 
-HI graph/import/GDS and the Athena join preview are validated. Final Browser scenes, HI USD-weight sensitivity and primary LI analysis are now recorded below. The planned HI cutoff comparison is also complete. Role 3 adoption, live runner trials and end-to-end Step Functions integration remain pending. This is a findings record, not a claim that all Role 4 deliverables are complete.
+HI graph/import/GDS and the Athena join preview are validated. Final Browser scenes, HI USD-weight sensitivity and primary LI analysis are now recorded below. The planned HI cutoff comparison is also complete. Task 11 direct sample/HI/repeat trials passed. Role 3 adoption, Task 12 SSM/failure tests and end-to-end Step Functions integration remain pending. This is a findings record, not a claim that all Role 4 deliverables are complete.
 
 ## Population and reconciliation
 
@@ -74,9 +74,9 @@ Ryan's shared-attempt values require annotations; direct values do not. Full att
 | 09b join preview | `47187dbd-4b2e-4948-9836-75462cd0f393` |
 | 09c unchanged join count | `7a8f1d2a-8858-4741-8412-fdd92a26c5b7` |
 
-Other execution IDs were not supplied here; do not infer them from transaction IDs. Source SQL: [exports](export_edges.sql) and [feature registration, checks and join](athena_handoff.sql). All observations are from the manual run and local screenshots; the SQL files consolidate those statements and have not been executed as an automated pipeline.
+Other execution IDs were not supplied here; do not infer them from transaction IDs. Source SQL: [exports](export_edges.sql) and [feature registration, checks and join](athena_handoff.sql). The preceding results refer to the accepted manual run. Later sections record direct EC2 automation trials separately; no successful SSM/Step Functions integration is claimed.
 
-Automation implementation/status: [pipeline interface](README.md#step-functions-info-for-sonia). Offline tests pass; no deployed automation success is claimed.
+Automation implementation/status: [pipeline interface](README.md#step-functions-info-for-sonia). Offline tests and direct EC2 trials pass; SSM and integrated workflow acceptance remain pending.
 
 ## HI/LI cutoff measurement - first robustness query validated
 
@@ -183,7 +183,7 @@ Directed unweighted LI betweenness wrote 4,924 properties after a 788,744-byte m
 
 LI count-weighted Louvain used 13,453 unordered links with total weight 15,782, projected as 26,906 undirected relationships over 4,924 banks. Maximum estimated memory: 1,484,648 bytes. Result: 142 communities, modularity 0.45376073179686327, 4,924 properties written. Saved coverage confirmed all 4,924 banks scored and assigned. Largest observed communities: 3465 (1,190 banks), 3749 (699), 2373 (298). Evidence: [Louvain summary](screenshots/10m-li-louvain-summary.png), [membership preview](screenshots/10n-li-community-membership.png).
 
-The [HI/LI saved-graph comparison](screenshots/10o-hi-li-graph-comparison.png) confirms full score/assignment coverage in both scopes, original HI 113 communities and LI 142. HI remains 5,159 banks / 29,374 corridors / 34,552 transactions; LI remains 4,924 / 13,724 / 15,782. These are different synthetic populations; matching IDs do not establish entity identity. This does not prove ranking stability or detection improvement. The subsequent HI cutoff comparison is recorded separately; live automation remains pending.
+The [HI/LI saved-graph comparison](screenshots/10o-hi-li-graph-comparison.png) confirms full score/assignment coverage in both scopes, original HI 113 communities and LI 142. HI remains 5,159 banks / 29,374 corridors / 34,552 transactions; LI remains 4,924 / 13,724 / 15,782. These are different synthetic populations; matching IDs do not establish entity identity. This does not prove ranking stability or detection improvement. The subsequent HI cutoff comparison is recorded separately; SSM and integrated automation remain pending.
 
 Athena query ID: `3ae95519-35fc-42ef-9bfe-1afcb4205a34`. Query: the source-reconciliation SELECT in `export_edges.sql`, with dataset changed to `LI-Medium`; laundering label 1 and individual USD below $20M. Reported and screenshot-verified totals: 15,892 evidence transactions / $908,804,372.35; 15,782 cross-bank transactions / $908,116,109.62. These match the earlier LI baseline. Evidence: [LI source reconciliation](screenshots/10i-li-source-reconciliation.png). The screenshot shows result totals; SQL/filter context is recorded here. This check does not establish CSV completeness or successful LI import. Subsequent LI import and analysis results are recorded in this section.
 
@@ -233,9 +233,208 @@ Ryan must confirm final list consumption and source freshness. The existing
 LEFT JOIN is a validated preview, not a published final Priority Sharing List.
 Personal message drafts remain local; no message has been sent by this audit.
 
+Repository cross-check on 5 November 2026: Role 3 commit `37e8554` (4 November,
+18:21 Singapore time) added `viz/bq1_corridors_viz.twb`; `4dfd1ad` removed the old
+`Book1.twbx`. The XML contains BQ1 Heatmap and BQ1 Ranked Table sheets and an
+Athena relation to `is459_g2t1_aml.bq1_corridors_ranked`. It does not reference the
+graph feature table, betweenness or community fields. Corridor SQL is unchanged
+from `2272e52` (2 November processed-bucket location fix); no `priority_list.sql`
+is present in the corridor folder. This establishes workbook/source-code status,
+not whether live Athena tables were rerun. Current source-snapshot alignment
+and final graph-feature adoption still require confirmation; no graph reimport
+is warranted solely because the workbook was committed.
+
+## Direct automation trial - sample validated
+
+On 6 November 2026 the user executed release `role4-20261106-01` on the existing
+EC2 host with run ID `sample-auto-20261106-01` and dataset `sample`. The runner
+printed SUCCEEDED, total elapsed37.155682 seconds, runner exit0 and log exit0.
+Reported output table:
+`is459_g2t1_aml.bq1_graph_bank_features_sample_auto_20261106_01`.
+This establishes a successful runner-reported sample execution, not full HI,
+SSM/Step Functions integration or an independent preservation verification.
+
+| Stage | Wall seconds |
+|---|---:|
+| Readiness | 1.296263 |
+| Source/input exports, including polling and downloads | 16.210757 |
+| Input validation and staging | 1.945599 |
+| Neo4j import and validation | 5.215950 |
+| Betweenness with projection/estimate | 2.852008 |
+| Louvain with link/projection/estimate preparation | 0.769485 |
+| Feature validation and publication | 1.679032 |
+| Athena registration and validation | 6.538750 |
+| Total through success-receipt publication | 37.155682 |
+
+The algorithm stages include preparation, not isolated algorithm compute time.
+Elapsed time is not EC2 billed uptime or peak memory.
+
+The published S3 receipt was subsequently read successfully. It reports dataset
+sample,42 banks,35 corridors/transactions,USD434634.33,8 communities,
+modularity0.7102040816326531 and42 assignments, matching manual sample totals.
+The accepted HI post-trial preservation check passed:scope/node count/relationship
+count/node-properties SHA256/relationship-properties SHA256 all match. HI retains
+46,615 scoped nodes and92,612 relationships; Active labels were intentionally
+excluded from the fingerprints. Verification record is stored on EC2 at
+`/home/ssm-user/role4/trial-evidence/hi-preservation-after-sample-auto-20261106-01.json`.
+Independent Athena inspection of
+`is459_g2t1_aml.bq1_graph_bank_features_sample_auto_20261106_01` subsequently
+returned42 rows,42 unique banks,8 communities and0 invalid rows (bank ID blank/null,
+betweenness null/negative,or community null). Query ID has not yet been supplied.
+The first direct sample trial passed its reported execution, published receipt,
+HI preservation and independent feature-table checks. Full HI and fresh-run repeatability subsequently passed as recorded below. SSM/Step Functions trials remain pending.
+
+## Direct automation trial - first HI run validated
+
+User-reported run on6 November2026: release role4-20261106-01,
+run ID `hi-auto-20261106-01`,dataset HI-Medium;SUCCEEDED with runner exit0/log
+exit0. Output table:
+`is459_g2t1_aml.bq1_graph_bank_features_hi_auto_20261106_01`.
+
+| Stage | Wall seconds |
+|---|---:|
+| Readiness | 1.200815 |
+| Source/input exports, including polling and downloads | 16.356384 |
+| Input validation and staging | 2.712180 |
+| Neo4j import and validation | 23.176010 |
+| Betweenness with projection/estimate | 5.677433 |
+| Louvain with link/projection/estimate preparation | 3.878652 |
+| Feature validation and publication | 2.797833 |
+| Athena registration and validation | 7.067132 |
+| Total through success-receipt publication | 63.522618 |
+
+The published HI S3 receipt was subsequently inspected:5159 banks,29374 corridors,
+34552 cross-bank transactions/USD2308523888.96,34891 account transfers/
+USD2311266994.08;113 communities,modularity0.3596071963885728,5159 assignments.
+These source totals match accepted manual HI. Post-HI preservation verification
+returned all five checks true and unchanged=true against the original fingerprint
+(46615 scoped nodes,92612 relationships). Independent Athena feature validation
+returned5159 rows,5159 unique banks,113 communities,0 invalid rows. Query ID:
+`5fb8a8a9-d2e4-4acf-9ac9-7a75413a5676`.
+
+The first full-HI direct trial passed terminal execution, published-receipt,
+accepted-HI preservation and independent feature-table checks. Fresh-run repeatability subsequently passed as recorded below; manual/automated community membership also matched.
+This is not a successful SSM or Step Functions execution. Runtime is not total
+EC2 billed uptime or peak RAM. Evidence saved: [terminal](screenshots/11e-hi-runner-terminal-success.png)
+and [HI preserved](screenshots/11f-hi-preserved-after-hi-trial.png).
+
+Independent manual/automated bank-feature comparison returned5159 matching bank
+IDs,0 manual-only banks,0 auto-only banks,0 betweenness mismatches beyond
+max(1e-6 absolute,1e-9 relative) tolerance. Maximum score delta:
+1.1641532182693481E-10,well below the specified tolerance. Query ID:
+`a465ff5f-5561-4df1-9394-9f1b06202cbf`.
+This validates bank coverage and numerical score agreement; community
+membership equivalence was separately checked because labels are arbitrary.
+
+Independent community overlap comparison returned5159 matching banks,113 manual
+communities,113 automated communities,0 manual groups split across automated
+groups and0 automated groups merging manual groups. Together with complete
+unique bank-ID matching, this establishes the same partition of these banks
+in the two compared outputs, regardless of numeric community labels. Query ID:
+`ee12264a-1031-460c-8245-8e0aaafa6b40`.
+This does not establish stability across all future runs;
+the subsequent fresh-ID repeatability trial is recorded below.
+
+## Direct automation repeat trial - second HI run validated
+
+Run `hi-auto-20261106-02`,dataset HI-Medium,release role4-20261106-01 returned
+SUCCEEDED on6 November2026;runner exit0/log exit0. Output table:
+`is459_g2t1_aml.bq1_graph_bank_features_hi_auto_20261106_02`.
+
+| Stage | Wall seconds |
+|---|---:|
+| Readiness | 1.240984 |
+| Source/input exports, including polling and downloads | 16.203580 |
+| Input validation and staging | 2.675848 |
+| Neo4j import and validation | 14.152538 |
+| Betweenness with projection/estimate | 5.021460 |
+| Louvain with link/projection/estimate preparation | 3.440045 |
+| Feature validation and publication | 2.372268 |
+| Athena registration and validation | 6.693308 |
+| Total through success-receipt publication | 52.480852 |
+
+The published run02 S3 receipt was inspected:5159 banks,29374 corridors,34552
+cross-bank transactions/USD2308523888.96,34891 account transfers/USD2311266994.08;
+113 communities,modularity0.3596071963885728,5159 assignments. These match the
+first HI run and accepted manual totals. The feature table/prefix identify run02,
+separately from run01. The completed repeatability checks are recorded below. The preservation check returned all_preserved=true, with all
+five checks true for accepted manual hi-01 and first automated hi-auto-20261106-01.
+Independent Athena run02 validation returned5159 rows,5159 unique banks,113
+communities,0 invalid rows;query ID`d55dc6f8-0a52-467e-9bc0-dc286429be15`.
+Repeat lineage comparison returned all8 checks true:correct IDs/success,
+same dataset/filter/code/totals,separate tables/expected output locations,and
+first published receipt unchanged. Recorded transaction CSV hashes match, but
+bank-edge CSV hashes differ. This proves differing exported bytes,not by itself
+differing numerical corridor values. Semantic comparison subsequently confirmed
+both staged files match their receipt hashes;29374 unique pairs each,0 pairs
+exclusive to either run,same pair order,0 transaction-count differences. There
+are140 USD text/numeric differences with maximum absolute delta1E-9 dollars;
+none exceeds the stated one-cent per-pair tolerance. With identical recorded
+transaction exports,these tiny aggregate differences are consistent with
+floating-point summation variation;they are documented rather than claiming
+byte-identical bank exports. Output-feature and membership comparisons subsequently passed, as recorded below. The run01
+fingerprint baseline was saved before the repeat (46615 nodes,92612 relationships)
+at `/home/ssm-user/role4/trial-evidence/hi-auto-01-before-repeat.json`.
+Do not interpret a lower second runtime as an established performance trend:
+cache/warmup and other execution differences have not been controlled.
+
+Independent run01/run02 feature comparison matched5159 banks,with0 banks
+exclusive to either run and0 betweenness mismatches beyond the existing
+max(1e-6 absolute,1e-9 relative) tolerance. Maximum absolute score delta:
+2.3283064365386963E-10. Athena query ID:
+`1fa74ea8-81ad-453d-8f6f-2feff5199312`.
+Repeat community-membership comparison returned5159 matching banks,113 groups
+per run,0 run01 splits and0 run02 merges. With unique complete bank-ID matching,
+this establishes the same partition in the two compared outputs,ignoring
+arbitrary numeric labels. Query ID:`189b5da1-06ce-409b-b50b-d463661a759c`.
+Evidence:[repeat community comparison](screenshots/11o-hi-repeat-community-comparison.png).
+
+Task11 direct-run functional/repeatability acceptance checks passed for the
+reviewed release and observed source populations:sample37.155682s,HI run01
+63.522618s,HI run02 52.480852s;complete outputs and recorded within-tolerance
+differences. Earlier manual HI and first automated HI fingerprints are unchanged;
+new scopes/tables/prefixes are separate. This does not certify future runs,
+failures/timeouts or SSM/Step Functions integration. Those belong to Task12.
+
+## Task 11 completion and evidence index
+
+Completed on 6 November 2026 for release `role4-20261106-01`, whose three
+deployed hashes match the audited snapshot. No additional workflow run is
+required to close Task 11. The first automated graph and accepted manual graph
+were preserved during the fresh-ID repeat. Inputs/counts/coverage agree; tiny
+recorded monetary and score differences are within stated tolerances. This
+completion is scoped to the observed direct trials, not future runs or failure
+handling. Original manual HI remains the agreed Role 3 baseline until the team
+explicitly adopts an automated run.
+
+| Evidence | Record |
+|---|---|
+| [11a release uploaded](screenshots/11a-runner-release-s3.png) | Three deployment sources, no credentials/data |
+| [11b sample terminal](screenshots/11b-sample-runner-terminal-success.png) | 37.155682s, runner/log exits 0 |
+| [11c HI preserved after sample](screenshots/11c-hi-preserved-after-sample-trial.png) | Accepted HI fingerprints unchanged |
+| [11d sample features](screenshots/11d-sample-auto-features-athena-validation.png) | 42/42/8/0; independent query ID not supplied |
+| [11e HI terminal](screenshots/11e-hi-runner-terminal-success.png) | Run01 63.522618s, exits 0 |
+| [11f HI preserved](screenshots/11f-hi-preserved-after-hi-trial.png) | Accepted manual HI unchanged |
+| [11g HI features](screenshots/11g-hi-auto-features-athena-validation.png) | 5159/5159/113/0; query `5fb8a8a9-d2e4-4acf-9ac9-7a75413a5676` |
+| [11h manual/auto scores](screenshots/11h-hi-manual-auto-feature-comparison.png) | Query `a465ff5f-5561-4df1-9394-9f1b06202cbf` |
+| [11i manual/auto communities](screenshots/11i-hi-manual-auto-community-comparison.png) | Query `ee12264a-1031-460c-8245-8e0aaafa6b40` |
+| [11j repeat terminal](screenshots/11j-hi-repeat-runner-terminal-success.png) | Run02 52.480852s, exits 0 |
+| [11k repeat preservation](screenshots/11k-hi-repeat-preservation.png) | Manual HI and run01 fingerprints unchanged |
+| [11l repeat features](screenshots/11l-hi-repeat-features-athena-validation.png) | 5159/5159/113/0; query `d55dc6f8-0a52-467e-9bc0-dc286429be15` |
+| [11m input differences](screenshots/11m-hi-repeat-input-semantic-comparison.png) | Identical pair/count/order; 140 USD deltas, maximum $1E-9 |
+| [11n repeat scores](screenshots/11n-hi-repeat-feature-comparison.png) | Query `1fa74ea8-81ad-453d-8f6f-2feff5199312` |
+| [11o repeat communities](screenshots/11o-hi-repeat-community-comparison.png) | Query `189b5da1-06ce-409b-b50b-d463661a759c` |
+
+Screenshots generally show selected results, not the whole SQL/source context;
+that context is preserved in shared SQL/setup records and the supplied query
+IDs. The independent sample query ID is an evidence-reference follow-up, not
+a failed functional check; recover it from query history if possible without
+rerunning a completed workflow. Per-run source/register/validation query IDs,
+code/input hashes and timing metrics also reside in each S3 success receipt.
+
 ## Remaining validation and submission work
 
-- Direct EC2 runner trial: permissions, reviewed release, validated outputs and measured runtime.
+- Direct EC2 runner trials passed;retain measured run/release/output references.
 - SSM success/failure trials, terminal outcome and response-code handling.
 - Sonia's integrated execution, accepted-run consumption and EC2 lifecycle agreement.
 - Ryan's final priority-list adoption and final team report/slides/video artefacts.

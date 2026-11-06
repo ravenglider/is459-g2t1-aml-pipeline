@@ -68,3 +68,115 @@ FROM is459_g2t1_aml.transactions_clean
 WHERE dataset = 'HI-Medium'
   AND txn_id IN (7394026252962401598, -2980862507599786311, 606750438349263592)
 ORDER BY txn_ts;
+
+-- Task 11: independent full-HI automated feature check executed:5159,5159,113,0.
+-- Query ID:5fb8a8a9-d2e4-4acf-9ac9-7a75413a5676; evidence11g.
+-- Sample equivalent used bq1_graph_bank_features_sample_auto_20261106_01
+-- and returned42,42,8,0; its query ID is not yet supplied (evidence11d).
+-- Repeat HI validation used the SAME SELECT with the table suffix changed to
+-- hi_auto_20261106_02;returned5159,5159,113,0.
+-- Repeat query ID:d55dc6f8-0a52-467e-9bc0-dc286429be15.
+SELECT COUNT(*) AS bank_rows,
+       COUNT(DISTINCT bank_id) AS unique_banks,
+       COUNT(DISTINCT community_id) AS communities,
+       COUNT_IF(bank_id IS NULL OR TRIM(bank_id) = ''
+                OR betweenness IS NULL OR betweenness < 0
+                OR community_id IS NULL) AS invalid_rows
+FROM is459_g2t1_aml.bq1_graph_bank_features_hi_auto_20261106_01;
+
+-- Task 11: manual/automated feature comparison executed:
+-- matched5159,manual_only0,auto_only0,score_mismatches0,
+-- max_score_delta1.1641532182693481E-10.
+-- Query ID:a465ff5f-5561-4df1-9394-9f1b06202cbf.
+-- FULL OUTER JOIN exposes missing/extra bank IDs in either population.
+-- Score tolerance:max(1e-6 absolute,1e-9 relative to manual score), allowing
+-- floating-point accumulation differences. This is not an accuracy guarantee.
+-- Community labels are arbitrary: compare their membership separately, not IDs.
+WITH paired AS (
+    SELECT m.bank_id AS manual_id,a.bank_id AS auto_id,
+           m.betweenness AS manual_score,a.betweenness AS auto_score
+    FROM is459_g2t1_aml.bq1_graph_bank_features_hi01 m
+    FULL OUTER JOIN is459_g2t1_aml.bq1_graph_bank_features_hi_auto_20261106_01 a
+      ON m.bank_id = a.bank_id
+)
+SELECT COUNT_IF(manual_id IS NOT NULL AND auto_id IS NOT NULL) AS matched_banks,
+       COUNT_IF(manual_id IS NOT NULL AND auto_id IS NULL) AS manual_only,
+       COUNT_IF(manual_id IS NULL AND auto_id IS NOT NULL) AS auto_only,
+       COUNT_IF(manual_id IS NOT NULL AND auto_id IS NOT NULL
+                AND ABS(auto_score-manual_score) >
+                    GREATEST(0.000001,ABS(manual_score)*0.000000001)) AS score_mismatches,
+       MAX(ABS(auto_score-manual_score)) AS max_score_delta
+FROM paired;
+
+-- Task 11: fresh-ID run01/run02 partition equivalence.
+-- Executed:5159 matched,113 groups each,0 run01 splits,0 run02 merges.
+-- Query ID:189b5da1-06ce-409b-b50b-d463661a759c.
+-- IDs/uniqueness/coverage are checked separately.
+-- Both split/merge counts zero means equivalent partitions of matched banks.
+WITH overlaps AS (
+    SELECT f.community_id AS first_community,
+           s.community_id AS second_community,
+           COUNT(*) AS shared_banks
+    FROM is459_g2t1_aml.bq1_graph_bank_features_hi_auto_20261106_01 f
+    JOIN is459_g2t1_aml.bq1_graph_bank_features_hi_auto_20261106_02 s
+      ON f.bank_id = s.bank_id
+    GROUP BY f.community_id,s.community_id
+), first_groups AS (
+    SELECT first_community,COUNT(*) AS mapped_groups
+    FROM overlaps GROUP BY first_community
+), second_groups AS (
+    SELECT second_community,COUNT(*) AS mapped_groups
+    FROM overlaps GROUP BY second_community
+)
+SELECT (SELECT SUM(shared_banks) FROM overlaps) AS matched_banks,
+       (SELECT COUNT(*) FROM first_groups) AS run01_communities,
+       (SELECT COUNT(*) FROM second_groups) AS run02_communities,
+       (SELECT COUNT_IF(mapped_groups > 1) FROM first_groups) AS run01_splits,
+       (SELECT COUNT_IF(mapped_groups > 1) FROM second_groups) AS run02_merges;
+
+-- Task 11: manual/automated partition equivalence, ignoring numeric labels.
+-- Executed:5159 matched,113 manual groups,113 auto groups,0 splits,0 merges.
+-- Query ID:ee12264a-1031-460c-8245-8e0aaafa6b40.
+-- Bank-ID uniqueness/complete matching were checked
+-- above. Zero manual_splits AND zero auto_merges establish equivalent groups
+-- over the matched banks, even if community ID numbers differ.
+WITH overlaps AS (
+    SELECT m.community_id AS manual_community,
+           a.community_id AS auto_community,
+           COUNT(*) AS shared_banks
+    FROM is459_g2t1_aml.bq1_graph_bank_features_hi01 m
+    JOIN is459_g2t1_aml.bq1_graph_bank_features_hi_auto_20261106_01 a
+      ON m.bank_id = a.bank_id
+    GROUP BY m.community_id,a.community_id
+), manual_groups AS (
+    SELECT manual_community,COUNT(*) AS mapped_groups
+    FROM overlaps GROUP BY manual_community
+), auto_groups AS (
+    SELECT auto_community,COUNT(*) AS mapped_groups
+    FROM overlaps GROUP BY auto_community
+)
+SELECT (SELECT SUM(shared_banks) FROM overlaps) AS matched_banks,
+       (SELECT COUNT(*) FROM manual_groups) AS manual_communities,
+       (SELECT COUNT(*) FROM auto_groups) AS auto_communities,
+       (SELECT COUNT_IF(mapped_groups > 1) FROM manual_groups) AS manual_splits,
+       (SELECT COUNT_IF(mapped_groups > 1) FROM auto_groups) AS auto_merges;
+
+-- Task 11: fresh-ID repeat feature comparison (run01 versus run02).
+-- Executed:5159 matched,0 run01-only,0 run02-only,0 score mismatches;
+-- maximum score delta2.3283064365386963E-10. Same tolerance as manual/auto.
+-- Query ID:1fa74ea8-81ad-453d-8f6f-2feff5199312.
+WITH paired AS (
+    SELECT f.bank_id AS first_id,s.bank_id AS second_id,
+           f.betweenness AS first_score,s.betweenness AS second_score
+    FROM is459_g2t1_aml.bq1_graph_bank_features_hi_auto_20261106_01 f
+    FULL OUTER JOIN is459_g2t1_aml.bq1_graph_bank_features_hi_auto_20261106_02 s
+      ON f.bank_id = s.bank_id
+)
+SELECT COUNT_IF(first_id IS NOT NULL AND second_id IS NOT NULL) AS matched_banks,
+       COUNT_IF(first_id IS NOT NULL AND second_id IS NULL) AS run01_only,
+       COUNT_IF(first_id IS NULL AND second_id IS NOT NULL) AS run02_only,
+       COUNT_IF(first_id IS NOT NULL AND second_id IS NOT NULL
+                AND ABS(second_score-first_score) >
+                    GREATEST(0.000001,ABS(first_score)*0.000000001)) AS score_mismatches,
+       MAX(ABS(second_score-first_score)) AS max_score_delta
+FROM paired;

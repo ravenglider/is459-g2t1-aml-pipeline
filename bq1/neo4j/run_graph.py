@@ -52,6 +52,7 @@ def aws_json(args, region):
 
 
 def query_athena(sql, args, work, download=True):
+    started = time.monotonic()
     query = aws_json(['athena', 'start-query-execution', '--query-string', sql,
         '--work-group', args.workgroup, '--query-execution-context',
         json.dumps({'Database': 'is459_g2t1_aml'}), '--result-configuration',
@@ -65,11 +66,17 @@ def query_athena(sql, args, work, download=True):
                               '--query-execution-id', query_id], args.region)['QueryExecution']
         state = execution['Status']['State']
         if state == 'SUCCEEDED':
+            metrics = {'query_wait_seconds': round(time.monotonic() - started, 6),
+                       'statistics': execution.get('Statistics', {})}
+            if hasattr(args, 'athena_metrics'):
+                args.athena_metrics[query_id] = metrics
             if not download:
                 return query_id, None
             path = work / (query_id + '.csv')
+            download_started = time.monotonic()
             aws(['s3', 'cp', execution['ResultConfiguration']['OutputLocation'],
                  str(path), '--only-show-errors'], args.region)
+            metrics['s3_download_seconds'] = round(time.monotonic() - download_started, 6)
             return query_id, path
         require(state not in ('FAILED', 'CANCELLED'), 'Athena query failed: ' + query_id)
         time.sleep(3)
@@ -187,6 +194,15 @@ def publish(args, path, key):
 
 
 def run(args):
+    run_started = time.monotonic()
+    started_utc = datetime.now(timezone.utc).isoformat()
+    timings = {}
+    args.athena_metrics = {}
+
+    def record_stage(name, started):
+        timings[name] = round(time.monotonic() - started, 6)
+        print(json.dumps({'stage': name, 'seconds': timings[name]}), flush=True)
+
     # Root is expected for SSM to read the mounted import dir and local .env.
     import fcntl  # Linux EC2 only; keep pure validation helpers testable on Windows.
     home = Path(args.role4_home)
@@ -207,17 +223,21 @@ def run(args):
         db = Neo4j(home / '.env', args.query_timeout)
         versions = db.query('CALL dbms.components() YIELD versions,edition RETURN versions,edition')
         gds = db.query('RETURN gds.version() AS version')
+        record_stage('readiness_seconds', run_started)
         exports = statements(ROOT / 'export_edges.sql')
         require(len(exports) == 3, 'Expected exactly three export/source SQL statements')
         exports = [s.replace("'HI-Medium'", "'" + args.dataset + "'") for s in exports]
         query_ids = {}
         paths = {}
+        stage_started = time.monotonic()
         # Query baseline first. Sonia must serialize source refreshes around this run.
         query_ids['source'], baseline_path = query_athena(exports[2], args, work)
         baseline_rows = rows(baseline_path)
         require(len(baseline_rows) == 1, 'Invalid source summary')
         for key, sql in zip(('bank_edges', 'transactions'), exports[:2]):
             query_ids[key], paths[key] = query_athena(sql, args, work)
+        record_stage('source_and_input_exports_seconds', stage_started)
+        stage_started = time.monotonic()
         totals = check_inputs(rows(paths['bank_edges'], BANK_HEADER),
                               rows(paths['transactions'], TX_HEADER), baseline_rows[0])
         # Input files live below the existing dedicated Docker bind mount.
@@ -237,6 +257,8 @@ def run(args):
         manifest_path = work / 'manifest.json'
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding='utf-8')
         publish(args, manifest_path, 'bq1_graph_edges/' + args.run_id + '/manifest.json')
+        record_stage('input_validation_and_staging_seconds', stage_started)
+        stage_started = time.monotonic()
         imports = statements(ROOT / 'import.cypher')
         for statement in imports:
             statement = statement.replace('file:///hi-01/',
@@ -252,6 +274,8 @@ def run(args):
         for name in ('cross_bank_usd', 'evidence_usd'):
             require(abs(Decimal(str(actual[name])) - Decimal(totals[name])) <= Decimal('.01'),
                     'Import USD mismatch: ' + name)
+        record_stage('neo4j_import_and_validation_seconds', stage_started)
+        stage_started = time.monotonic()
         projection = db.query("CALL gds.graph.project('role4Directed','ActiveBank',"
                               "{LAUNDERING_TO:{orientation:'NATURAL'}}) "
                               'YIELD nodeCount,relationshipCount RETURN nodeCount,relationshipCount')[0]
@@ -265,6 +289,8 @@ def run(args):
         between = db.query("CALL gds.betweenness.write('role4Directed'," + config +
                            ') YIELD nodePropertiesWritten RETURN nodePropertiesWritten')[0]
         require(between['nodePropertiesWritten'] == totals['banks'], 'Incomplete betweenness write')
+        record_stage('betweenness_with_projection_estimate_seconds', stage_started)
+        stage_started = time.monotonic()
         db.query("MATCH (a:ActiveBank)-[r:LAUNDERING_TO]->(b:ActiveBank) "
                  'WITH CASE WHEN a.bank_id<b.bank_id THEN a ELSE b END AS lo, '
                  'CASE WHEN a.bank_id<b.bank_id THEN b ELSE a END AS hi, '
@@ -280,6 +306,8 @@ def run(args):
             ') YIELD communityCount,modularity,nodePropertiesWritten '
             'RETURN communityCount,modularity,nodePropertiesWritten')[0]
         require(community['nodePropertiesWritten'] == totals['banks'], 'Incomplete Louvain write')
+        record_stage('louvain_with_links_projection_estimate_seconds', stage_started)
+        stage_started = time.monotonic()
         features = db.query('MATCH (b:ActiveBank) RETURN b.bank_id AS bank_id, '
             'b.betweenness AS betweenness,b.community_id AS community_id ORDER BY bank_id')
         validate_features(features, totals)
@@ -296,6 +324,8 @@ def run(args):
         output_prefix = 'bq1_graph_results/' + args.run_id + '/'
         publish(args, feature_path, output_prefix + 'bank_features/bank_features.csv')
         publish(args, size_path, output_prefix + 'community_sizes/community_sizes.csv')
+        record_stage('feature_validation_and_publication_seconds', stage_started)
+        stage_started = time.monotonic()
         # Register a distinct table for this new run. No destructive DROP/CTAS.
         table = 'bq1_graph_bank_features_' + args.run_id.replace('-', '_')
         location = 's3://' + args.bucket + '/' + output_prefix + 'bank_features/'
@@ -316,8 +346,13 @@ def run(args):
                 and int(check['unique_banks']) == totals['banks']
                 and int(check['communities']) == community['communityCount']
                 and int(check['bad']) == 0, 'Published Athena feature validation failed')
+        record_stage('athena_registration_and_validation_seconds', stage_started)
         receipt = {**manifest, 'status': 'SUCCEEDED',
+            'started_utc': started_utc,
             'completed_utc': datetime.now(timezone.utc).isoformat(),
+            'timings_seconds': timings,
+            'elapsed_before_success_publication_seconds': round(time.monotonic() - run_started, 6),
+            'athena_query_metrics': args.athena_metrics,
             'feature_table': 'is459_g2t1_aml.' + table,
             'feature_location': location, 'neo4j': versions, 'gds': gds,
             'betweenness_estimate': estimate, 'louvain_estimate': community_estimate,
@@ -329,6 +364,7 @@ def run(args):
         receipt_path.write_text(json.dumps(receipt, indent=2), encoding='utf-8')
         publish(args, receipt_path, output_prefix + 'success.json')  # publish LAST
         print(json.dumps({'status': 'SUCCEEDED', 'run_id': args.run_id,
+                          'elapsed_seconds': round(time.monotonic() - run_started, 6),
                           'feature_table': receipt['feature_table']}))
 
 

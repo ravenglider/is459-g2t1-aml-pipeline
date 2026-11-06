@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
 import sys
+import json
 
 spec = importlib.util.spec_from_file_location('run_graph', Path(__file__).with_name('run_graph.py'))
 runner = importlib.util.module_from_spec(spec)
@@ -88,6 +89,11 @@ class ValidationTests(unittest.TestCase):
         totals = runner.check_inputs(bank, tx, baseline)
         publishes = []
         calls = []
+        self.last_receipt = {}
+        def fake_publish(args, path, key):
+            publishes.append(key)
+            if key.endswith('/success.json'):
+                self.last_receipt.update(json.loads(path.read_text(encoding='utf-8')))
         class FakeDB:
             def __init__(self, *_): pass
             def query(self, sql, params=None):
@@ -134,7 +140,7 @@ class ValidationTests(unittest.TestCase):
                  patch.object(runner,'Neo4j',FakeDB), \
                  patch.object(runner,'query_athena',fake_athena), \
                  patch.object(runner,'aws_json',return_value={}), \
-                 patch.object(runner,'publish',side_effect=lambda a,p,k:publishes.append(k)):
+                 patch.object(runner,'publish',side_effect=fake_publish):
                 if truncate:
                     with self.assertRaisesRegex(RuntimeError,'Incomplete feature export'):
                         runner.run(args)
@@ -147,10 +153,16 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(publishes[-1],'bq1_graph_results/auto-test/success.json')
         self.assertIn('bq1_graph_results/auto-test/bank_features/bank_features.csv',publishes)
         self.assertTrue(any('file:///auto-auto-test/' in sql for sql in calls))
+        self.assertEqual(len(self.last_receipt['timings_seconds']), 8)
+        self.assertTrue(all(v >= 0 for v in self.last_receipt['timings_seconds'].values()))
+        self.assertGreaterEqual(self.last_receipt['elapsed_before_success_publication_seconds'],
+                                sum(self.last_receipt['timings_seconds'].values()) - .001)
+        self.assertIn('athena_query_metrics', self.last_receipt)
 
     def test_truncated_features_cannot_publish_success_or_features(self):
         publishes,_ = self.simulate_pipeline(truncate=True)
         self.assertFalse(any(k.endswith('success.json') or '/bank_features/' in k for k in publishes))
+        self.assertFalse(self.last_receipt)
 
 
 if __name__ == '__main__':
