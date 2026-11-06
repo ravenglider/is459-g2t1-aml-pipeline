@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 import io
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -15,6 +16,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import glue_sequence_job as job
+import package_glue_modules as packaging
 from package_glue_modules import MODULES, build_package
 
 
@@ -196,6 +198,129 @@ assert SparkContext._active_spark_context is None
             archive = Path(folder) / "modules.zip"
             build_package(archive)
             result = subprocess.run([sys.executable, "-I", "-c", script, str(archive), *MODULES],
+                                    cwd=folder, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_default_preflight_remains_byte_identical_to_legacy_format(self):
+        with tempfile.TemporaryDirectory() as folder:
+            default, explicit, legacy = [Path(folder) / name for name in ("default.zip", "explicit.zip", "legacy.zip")]
+            build_package(default)
+            build_package(explicit, profile="preflight")
+            with zipfile.ZipFile(legacy, "x", compression=zipfile.ZIP_STORED) as archive:
+                for name in sorted(MODULES):
+                    info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+                    info.create_system = 3
+                    info.external_attr = 0o100644 << 16
+                    archive.writestr(info, (ROOT / name).read_text(encoding="utf-8").replace("\r\n", "\n").encode("utf-8"))
+            self.assertEqual(len(MODULES), 9)
+            self.assertEqual(default.read_bytes(), legacy.read_bytes())
+            self.assertEqual(explicit.read_bytes(), legacy.read_bytes())
+
+    def test_generation_exact_thirteen_modules_hashes_and_determinism(self):
+        expected = set(MODULES) | {"sequence_sample_generation.py", "sequence_sample_staging.py",
+                                   "sequence_sample_run.py", "sequence_glue_runtime.py"}
+        with tempfile.TemporaryDirectory() as folder:
+            first, second = Path(folder) / "first.zip", Path(folder) / "second.zip"
+            digest = build_package(first, profile="generation")
+            self.assertEqual(build_package(second, profile="generation"), digest)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            self.assertEqual(hashlib.sha256(first.read_bytes()).hexdigest(), digest)
+            with zipfile.ZipFile(first) as archive:
+                self.assertEqual(archive.namelist(), sorted(expected))
+                self.assertEqual(len(archive.infolist()), 13)
+                self.assertEqual(len(archive.namelist()), len(set(archive.namelist())))
+                self.assertIsNone(archive.testzip())
+                for name in expected:
+                    canonical = (ROOT / name).read_text(encoding="utf-8").replace("\r\n", "\n").encode("utf-8")
+                    self.assertEqual(archive.read(name), canonical)
+                    self.assertEqual(hashlib.sha256(archive.read(name)).hexdigest(), hashlib.sha256(canonical).hexdigest())
+
+    def test_profiles_cannot_inject_duplicate_missing_or_unrelated_entries(self):
+        approved = packaging.GENERATION_MODULES
+        invalid = (approved + (approved[0],), approved[:-1], approved + ("tests/test_secret.py",),
+                   approved + ("credentials",), approved + ("../outside.py",), approved + ("unrelated.py",),
+                   approved + (None,), "all")
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / "rejected.zip"
+            for values in invalid:
+                with self.subTest(values=values), patch.dict(packaging.PROFILES, generation=values), self.assertRaises(ValueError):
+                    build_package(output, profile="generation")
+                self.assertFalse(output.exists())
+            for profile in ("all", "Generation", "", None, {}):
+                with self.subTest(profile=profile), self.assertRaises(ValueError):
+                    build_package(output, profile=profile)
+
+    def test_generation_ignores_unrelated_files_and_rejects_missing_or_unsafe_sources(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name in packaging.GENERATION_MODULES:
+                (root / name).write_text("# synthetic module\r\n", encoding="utf-8", newline="")
+            for name in ("credentials", ".env", "data.parquet", "unrelated.py", "test_secret.py"):
+                (root / name).write_text("excluded", encoding="utf-8")
+            (root / "tests").mkdir()
+            (root / "tests" / "test_data.py").write_text("excluded", encoding="utf-8")
+            (root / ".venv").mkdir()
+            with patch.object(packaging, "__file__", str(root / "package_glue_modules.py")):
+                output = root / "allowed.zip"
+                build_package(output, profile="generation")
+                with zipfile.ZipFile(output) as archive:
+                    self.assertEqual(archive.namelist(), sorted(packaging.GENERATION_MODULES))
+                    self.assertEqual(archive.read(packaging.GENERATION_MODULES[0]), b"# synthetic module\n")
+                with patch.object(Path, "is_symlink", return_value=True), self.assertRaises(ValueError):
+                    build_package(root / "unsafe.zip", profile="generation")
+                self.assertFalse((root / "unsafe.zip").exists())
+                (root / packaging.GENERATION_MODULES[-1]).unlink()
+                with self.assertRaises(ValueError):
+                    build_package(root / "missing.zip", profile="generation")
+                self.assertFalse((root / "missing.zip").exists())
+
+    def test_generation_existing_destination_is_preserved(self):
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / "existing.zip"
+            output.write_bytes(b"previous release")
+            with self.assertRaises(FileExistsError):
+                build_package(output, profile="generation")
+            self.assertEqual(output.read_bytes(), b"previous release")
+            with self.assertRaises(ValueError):
+                build_package(Path(folder) / "invalid.txt", profile="generation")
+
+    def test_generation_cli_profile(self):
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / "cli.zip"
+            result = subprocess.run([sys.executable, "-I", str(ROOT / "package_glue_modules.py"),
+                "--profile", "generation", "--output", str(output)], cwd=folder, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), hashlib.sha256(output.read_bytes()).hexdigest())
+            with zipfile.ZipFile(output) as archive:
+                self.assertEqual(archive.namelist(), sorted(packaging.GENERATION_MODULES))
+
+    def test_generation_zip_imports_without_source_cloud_network_or_spark_startup(self):
+        script = '''
+import importlib, importlib.abc, socket, sys
+from unittest.mock import patch
+class Block(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in {'awsglue', 'boto3', 'botocore'}:
+            raise AssertionError('Forbidden cloud import: ' + fullname)
+sys.meta_path.insert(0, Block())
+with patch.object(socket.socket, 'connect', side_effect=AssertionError('network forbidden')), \\
+     patch.object(socket.socket, 'connect_ex', side_effect=AssertionError('network forbidden')), \\
+     patch.object(socket.socket, 'sendto', side_effect=AssertionError('network forbidden')):
+    from pyspark import SparkContext
+    from pyspark.sql import SparkSession
+    assert SparkContext._active_spark_context is None
+    sys.path.insert(0, sys.argv[1])
+    with patch.object(SparkContext, '__init__', side_effect=AssertionError('Spark startup forbidden')), \\
+         patch.object(SparkSession.Builder, 'getOrCreate', side_effect=AssertionError('Spark startup forbidden')):
+        for name in sys.argv[2:]:
+            module = importlib.import_module(name[:-3])
+            assert module.__file__.startswith(sys.argv[1]), module.__file__
+    assert SparkContext._active_spark_context is None
+'''
+        with tempfile.TemporaryDirectory() as folder:
+            archive = Path(folder) / "generation.zip"
+            build_package(archive, profile="generation")
+            result = subprocess.run([sys.executable, "-I", "-c", script, str(archive), *packaging.GENERATION_MODULES],
                                     cwd=folder, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
