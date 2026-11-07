@@ -37,7 +37,8 @@ All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-
 - Own sample pattern-frequency query completed: 236 result rows, runtime 691 ms, scanned 225.55 KB; screenshot 09 saved. Full frequency totals remain unreconciled because only the first page was supplied.
 - Development destination-table lookup returned zero rows for all three proposed names; screenshot 09a saved. S3 output-prefix emptiness remains unverified.
 - User confirmed all three S3 development destinations empty before CTAS. Development lift creation succeeded (screenshot 10a): runtime 1.454 sec, scanned 454.24 KB.
-- Pending: inspect/reconcile development lift outputs, remaining integration validation as needed, trade-off/Sankey outputs, Tableau charts and full HI/LI publication.
+- Sample lift support totals reconcile: 184,449 pairs (134 positive sequences), 33,931 triples (38 positive sequences), as shown in inline chat evidence. Development trade-off CTAS succeeded; screenshot 11a saved (2.369 sec, 5.71 MB scanned).
+- Pending: inspect/reconcile trade-off outputs, remaining integration validation as needed, Sankey outputs, Tableau charts and full HI/LI publication.
 
 ## How to run
 

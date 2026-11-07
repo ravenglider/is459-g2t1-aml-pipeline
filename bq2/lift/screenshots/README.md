@@ -15,6 +15,7 @@ Original PNGs copied from Xiang Ying's Desktop without editing. Desktop original
 | [09-dev-pattern-frequency.png](09-dev-pattern-frequency.png) | Frequency query completed: 236 result rows; first six pair patterns visible. Runtime 691 ms, scanned 225.55 KB, queue 108 ms. Full output and query ID not supplied. |
 | [09a-dev-output-table-check.png](09a-dev-output-table-check.png) | Destination-table lookup completed with 0 rows for the three proposed development table names. Runtime 412 ms, queue 104 ms; scanned displayed as a dash. Does not establish S3 prefix emptiness. |
 | [10a-dev-lift-created.png](10a-dev-lift-created.png) | Development lift CTAS completed successfully. Runtime 1.454 sec, queue 108 ms, scanned 454.24 KB. SQL/table attribution from the accompanying walkthrough; query ID not supplied. |
+| [11a-dev-tradeoff-created.png](11a-dev-tradeoff-created.png) | Development trade-off CTAS completed successfully. Runtime 2.369 sec, queue 99 ms, scanned 5.71 MB. Query ID not supplied; statement attribution from conversation. |
 
 The corrected schema screenshot is saved as `01-cleaned-schema.png` and agrees with the pasted 20-column result.
 

@@ -80,3 +80,12 @@ Xiang Ying confirmed in chat that all three proposed development S3 output prefi
 [Own completion screenshot](screenshots/10a-dev-lift-created.png) shows the development lift CTAS completed successfully: runtime 1.454 sec, queue 108 ms, scanned 454.24 KB; result reuse toggle off. The walkthrough identifies the statement as development/03_lift.sql creating is459_g2t1_aml.bq2_lift_dev at s3://is459-g2t1-aml-processed-bucket/bq2_lift_dev/sample_20220901/. The crop does not display SQL or query ID; table attribution comes from the accompanying conversation.
 
 Next: SELECT sample rankings and reconcile support totals by length for one cutoff. CTAS completion does not yet establish ranking values or output reconciliation. Trade-off/Sankey creation, Tableau views and final HI/LI findings remain pending.
+
+
+## Sample lift inspection and trade-off creation — 7 Nov 2026
+
+Inline screenshots supplied in chat show the min_support=100 ranking query returned 20 rows (runtime 472 ms, queue 99 ms, scanned 3.44 KB). Visible leading patterns: pair Cheque -> Wire, support 300, 1 positive sequence, lift 4.5883; triple Cash -> Cheque -> Wire, support 106, 9 positive sequences, lift 75.8141. Small positive counts and overlapping chains limit interpretation; these are in-sample associations, not final recommendations.
+
+The subsequent inline reconciliation screenshot shows length 2: 184,449 sequences, 134 positive sequences; length 3: 33,931 sequences, 38 positive sequences. Runtime 733 ms, queue 104 ms, scanned 1.05 KB. Support totals match the published batch; positive sequences can share the same source transaction. These two inline images have not been copied to the repository because their local file paths were not supplied. No CSV or query IDs were supplied.
+
+[Trade-off creation evidence](screenshots/11a-dev-tradeoff-created.png) shows successful completion of the walkthrough development/04_tradeoff.sql statement creating is459_g2t1_aml.bq2_tradeoff_dev. Runtime 2.369 sec, queue 99 ms, scanned 5.71 MB; query ID not supplied. Statement attribution comes from the accompanying conversation, since the screenshot omits the SQL. Next: inspect the eight min_support=100 policy rows and run development/06_reconciliation.sql. Trade-off values and reconciliation, Sankey outputs, Tableau and final HI/LI findings remain pending.
