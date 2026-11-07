@@ -18,10 +18,10 @@ Builds bank and account graphs from cleaned laundering-labelled transactions for
 | [robustness.cypher](robustness.cypher) | Weighting/cutoff overlaps, saved-scope comparisons and HI restoration |
 | [athena_handoff.sql](athena_handoff.sql) | HI feature registration, completeness and Role 3 join checks |
 | [findings.md](findings.md) | Measured results, limitations, evidence and query references |
-| [run_graph.py](run_graph.py), [test_run_graph.py](test_run_graph.py) | Direct EC2 trials/repeatability passed; offline tests; SSM/integration pending |
+| [run_graph.py](run_graph.py), [test_run_graph.py](test_run_graph.py) | Direct EC2 repeatability and SSM sample success passed; integrated pipeline acceptance pending with Sonia |
 | [screenshots/](screenshots/) | Named evidence images only |
 
-Manual sample/HI/LI analyses, Browser scenes and the planned HI weighting/cutoff comparisons are complete based on reported executions and saved evidence. The accepted HI graph was restored after manual comparisons and its stored properties were later preserved through all automation trials. Task 11 direct EC2 validation is complete: one sample and two fresh-ID HI runs passed output, baseline and repeatability checks. Current Active labels may point to the last automated run. SSM/integrated pipeline validation remains Task 12.
+Manual sample/HI/LI analyses, Browser scenes and the planned HI weighting/cutoff comparisons are complete based on reported executions and saved evidence. The accepted HI graph was restored after manual comparisons and its stored properties were later preserved through the Task 11 trials. Task 11 direct EC2 validation is complete: one sample and two fresh-ID HI runs passed output, baseline and repeatability checks. Task 12 SSM sample success/output acceptance, duplicate-ID rejection and an isolated shell-timeout probe passed on 7 November 2026. Current Active labels may point to the last automated sample run. Shared Step Functions integration belongs to Sonia and remains unverified.
 
 ## AWS resources
 
@@ -31,7 +31,7 @@ Manual sample/HI/LI analyses, Browser scenes and the planned HI weighting/cutoff
 | Shared EC2 | `is459-g2t1-ingest` / `i-0125056b848e5634a` |
 | Instance type | Temporarily `t3.medium` with team agreement |
 | IAM role | `is459-g2t1-ec2-s3-role` |
-| Verified policies | `AmazonS3FullAccess`, `AmazonSSMManagedInstanceCore`; successful direct-run Athena/Glue operations verified; SSM/failure-path permissions still to test |
+| Verified access | Attached `AmazonS3FullAccess` and `AmazonSSMManagedInstanceCore`; direct-run Athena/Glue operations and sample SSM execution verified. Shared orchestration permissions remain Sonia's integration responsibility |
 | Container / database | `role4-neo4j`, Neo4j 5.26.32 Community with GDS; persistent volumes |
 | Access | Session Manager; Browser 7474 and Bolt 7687 restricted to current public IP |
 | Athena workgroup / database | `primary` / `is459_g2t1_aml` |
@@ -70,11 +70,13 @@ Bank keys are `(scope,bank_id)`; account keys are `(scope,bank_id,account_id)`. 
 
 | Field | Value / status |
 |---|---|
-| Job type | Neo4j export/import/analysis on existing EC2, proposed SSM invocation |
+| Job type | Neo4j export/import/analysis on existing EC2; sample SSM invocation validated |
 | Exact runner | `run_graph.py`, deployed release `/home/ssm-user/role4/code/role4-20261106-01/run_graph.py` |
 | Required release files | Runner, `export_edges.sql`, `import.cypher` together |
 | Tested direct EC2 command | `sudo python3 -u /home/ssm-user/role4/code/role4-20261106-01/run_graph.py --run-id hi-auto-20261106-01 --dataset HI-Medium` (historical run; use a fresh ID for future work) |
 | Target | `i-0125056b848e5634a`, container `role4-neo4j` |
+| Tested SSM interface | `is459-g2t1-role4-graph`, version `1`; parameters `runId` (fresh immutable ID) and `dataset` (`sample`, `HI-Medium`, `LI-Medium`) |
+| Observed SSM sample trial | `sample-ssm-20261107-01`,42.217389s,Success/response0; output coverage42 banks/8 communities. Rejection and isolated shell-timeout evidence are in findings.md |
 | Accepted manual output table | `is459_g2t1_aml.bq1_graph_bank_features_hi01` |
 | Accepted manual output prefix | `s3://is459-g2t1-aml-processed-bucket/bq1_graph_results/hi-01/bank_features/` |
 | Automated output contract | New run-specific prefix/table; validated `success.json` published last; never overwrite accepted runs |
@@ -83,7 +85,7 @@ Bank keys are `(scope,bank_id)`; account keys are `(scope,bank_id,account_id)`. 
 | Observed direct runtime | HI run01:63.522618s; fresh HI run02:52.480852s; sample:37.155682s. Not an SSM/end-to-end SLA or billed EC2 uptime |
 | Completion/failure handling | Poll terminal SSM outcome with bounded timeout; require zero response code and validated outputs; coordinate EC2 lifecycle and exclusive graph use |
 
-The shared `BQ1_Neo4jLoad` placeholder is not a validated graph integration. Direct runner/repeatability trials passed; SSM success/failure and end-to-end trials remain. The runner enforces the primary cutoff; it does not implement uncapped comparisons or start/stop EC2. Personal Sonia messages and draft orchestration configuration stay local; adopted deployed configuration must be retained in the team's pipeline source.
+Sonia owns changes to the shared `BQ1_Neo4jLoad` placeholder, state machine and orchestration permissions. Role 4 sends her the tested command/interface, output table/S3 path, dependencies, runtime and evidence, following [the ingestion handoff](../../docs/ingestion-handoff.md#how-your-job-gets-added). Role 4 does not edit/deploy the shared Step Functions workflow. Its end-to-end graph integration remains unverified until Sonia supplies execution evidence. Direct trials and the SSM sample success/output check passed; duplicate-ID rejection and an isolated SSM shell-timeout probe also passed. Output-validation failure and integrated failure/timeout handling remain separate checks. The runner enforces the primary cutoff; it does not implement uncapped comparisons or start/stop EC2. Personal messages and draft orchestration configuration stay local; Sonia retains adopted configuration in the team's pipeline source.
 
 Validated direct-run performance instrumentation records stage wall times, Athena execution statistics and result-download times in the success receipt; algorithm timings include their projection/estimate preparation. The final log elapsed time includes success-receipt publication, while the receipt explicitly records elapsed time before its own publication. Direct wall times are measured and recorded in findings.md; EC2 billed uptime, cost and observed peak RAM have not been established.
 
@@ -93,4 +95,4 @@ Built and manually validated the bank/account graph workflow, source-supported p
 
 Accepted HI: **5,159 banks, 29,374 corridors, 34,552 cross-bank transactions, 113 communities**; feature join preserves **1,697,382 rows**. LI: **4,924 banks, 142 communities**. Uncapped HI: **5,166 banks, 111 communities**, with **9/10** top intermediaries shared with filtered HI. Detailed results and weighting caveats are in [findings.md](findings.md).
 
-Remaining: Ryan's final priority-list adoption, SSM/integrated automation evidence, and final team report/slides/videos. The Browser substitution needs recording in the team submission. Personal guide/notes, helpers, CSVs and coordination drafts remain gitignored.
+Remaining: Ryan's final priority-list adoption, any required remaining component failure checks, Sonia handoff/integration evidence, and final team report/slides/videos. The Browser substitution needs recording in the team submission. Personal guide/notes, helpers, CSVs and coordination drafts remain gitignored.

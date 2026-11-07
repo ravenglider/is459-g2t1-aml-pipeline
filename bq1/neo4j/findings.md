@@ -2,7 +2,7 @@
 
 Owner: Role 4. Manual run validated on 3 November 2026. BQ1: Which bank pairs are most involved in laundering, and which should prioritise information sharing?
 
-HI graph/import/GDS and the Athena join preview are validated. Final Browser scenes, HI USD-weight sensitivity and primary LI analysis are now recorded below. The planned HI cutoff comparison is also complete. Task 11 direct sample/HI/repeat trials passed. Role 3 adoption, Task 12 SSM/failure tests and end-to-end Step Functions integration remain pending. This is a findings record, not a claim that all Role 4 deliverables are complete.
+HI graph/import/GDS and the Athena join preview are validated. Final Browser scenes, HI USD-weight sensitivity and primary LI analysis are recorded below. The planned HI cutoff comparison is complete. Task 11 direct sample/HI/repeat trials passed. Task 12 SSM sample success/output acceptance, duplicate-run rejection and an isolated shell-timeout probe passed. Role 3 adoption, output-validation failure testing and Sonia-owned end-to-end Step Functions integration remain pending. This is a findings record, not a claim that all Role 4 deliverables are complete.
 
 ## Population and reconciliation
 
@@ -432,10 +432,71 @@ a failed functional check; recover it from query history if possible without
 rerunning a completed workflow. Per-run source/register/validation query IDs,
 code/input hashes and timing metrics also reside in each S3 success receipt.
 
+## Task 12 SSM sample invocation (7 November 2026)
+
+Document `is459-g2t1-role4-graph` version 1 was created; evidence:
+[12a document creation](screenshots/12a-ssm-command-document.png).
+The user reported Command ID `fe553b23-2f76-48a4-bf58-dd59f06b1997`,
+invocation status/detailed status `Success`, response code `0` and runner
+`SUCCEEDED` for `sample-ssm-20261107-01` in 42.217389 seconds.
+Published feature table reported by the runner:
+`is459_g2t1_aml.bq1_graph_bank_features_sample_ssm_20261107_01`.
+Independent Athena feature validation returned 42 rows,42 unique banks,
+8 communities and0 invalid rows; query ID
+`d40eb381-bdfd-40c7-a12a-b5a58ccc991e`.
+Invocation evidence: [12b SSM success](screenshots/12b-sample-ssm-command-success.png).
+The user inspected the run-specific S3 success receipt: status SUCCEEDED,
+dataset sample,35 evidence/cross-bank transactions,$434634.33 for both totals,
+35 corridors and42 banks. Louvain returned8 communities,modularity
+0.7102040816326531 and42 properties written. The feature table and S3 location
+match this run. Independent coverage evidence:
+[12c Athena validation](screenshots/12c-sample-ssm-features-athena-validation.png).
+The SSM sample success/output acceptance check passed. Duplicate-run rejection
+and an isolated shell-timeout probe are recorded below; output-validation failure
+and Sonia-owned Step Functions acceptance remain pending. No complete Task 12
+claim is made.
+
+### SSM duplicate-run rejection
+
+On 7 November 2026, deliberately reusing `sample-ssm-20261107-01` through
+document version 1 returned invocation status/detailed status `Failed`, response
+code `1`, and `FAILED: Run prefix exists; choose a NEW run ID`.
+Command ID: `b4f77ec0-dec7-4392-9537-dcb144a7bf93`.
+Evidence: [12d duplicate rejection](screenshots/12d-ssm-duplicate-run-rejected.png).
+The pre-test accepted receipt SHA256 was
+`065cf54575d145c033a4399ac966e7c84d6009f9e2b583b2410af71de5cd8f56`;
+the post-test hash matched exactly, confirming the accepted receipt was unchanged.
+This hash check covers the receipt bytes, not every output object or graph record.
+The old success receipt belongs
+to the earlier successful invocation, not this rejected attempt. This checks
+preflight rejection/nonzero SSM reporting, not output-validation failure,
+timeout handling or Step Functions failure propagation.
+
+### Isolated SSM execution-timeout probe
+
+On 7 November 2026, the AWS-RunShellScript probe used executionTimeout=30
+seconds with a 90-second sleep. Command ID:
+`0c6bc427-bcd0-4cbf-b618-69a75ca1d8bf`.
+The instance invocation reported `Timed Out`, detailed status `Execution Timed
+Out`, response code `137`. Output contained only `ROLE4_TIMEOUT_PROBE_STARTED`;
+the completion marker was absent. The displayed start/finish interval was
+06:09:52-06:10:22 GMT (30 seconds).
+Evidence: [12e SSM timeout](screenshots/12e-ssm-execution-timeout.png).
+This confirms timeout reporting for the isolated shell probe. It did not run
+the graph runner and does not establish database-query cancellation or
+Step Functions timeout/failure handling. Output-validation failure testing and
+shared-workflow integration remain pending.
+
 ## Remaining validation and submission work
 
+- Ownership confirmed 7 November 2026: Role 4 sends Sonia the tested command,
+  output table/S3 path, dependencies, runtime and component-test evidence.
+  Sonia owns shared Step Functions/role changes and integrated execution trials;
+  Role 4 records the evidence she supplies. No shared pipeline deployment was
+  performed by Role 4 during the component tests documented here.
 - Direct EC2 runner trials passed;retain measured run/release/output references.
-- SSM success/failure trials, terminal outcome and response-code handling.
+- SSM sample success,duplicate-run rejection and isolated shell-timeout checks
+  passed; output-validation failure and integrated failure/timeout checks remain.
 - Sonia's integrated execution, accepted-run consumption and EC2 lifecycle agreement.
 - Ryan's final priority-list adoption and final team report/slides/video artefacts.
 

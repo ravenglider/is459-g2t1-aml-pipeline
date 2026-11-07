@@ -161,6 +161,18 @@ SELECT (SELECT SUM(shared_banks) FROM overlaps) AS matched_banks,
        (SELECT COUNT_IF(mapped_groups > 1) FROM manual_groups) AS manual_splits,
        (SELECT COUNT_IF(mapped_groups > 1) FROM auto_groups) AS auto_merges;
 
+-- Task 12: independent SSM sample feature validation passed on 7 November 2026.
+-- Observed:42 bank_rows,42 unique_banks,8 communities,0 invalid_rows.
+-- Query ID:d40eb381-bdfd-40c7-a12a-b5a58ccc991e.
+-- Command ID:fe553b23-2f76-48a4-bf58-dd59f06b1997.
+SELECT COUNT(*) AS bank_rows,
+       COUNT(DISTINCT bank_id) AS unique_banks,
+       COUNT(DISTINCT community_id) AS communities,
+       COUNT_IF(bank_id IS NULL OR TRIM(bank_id) = ''
+                OR betweenness IS NULL OR NOT is_finite(betweenness)
+                OR betweenness < 0 OR community_id IS NULL) AS invalid_rows
+FROM is459_g2t1_aml.bq1_graph_bank_features_sample_ssm_20261107_01;
+
 -- Task 11: fresh-ID repeat feature comparison (run01 versus run02).
 -- Executed:5159 matched,0 run01-only,0 run02-only,0 score mismatches;
 -- maximum score delta2.3283064365386963E-10. Same tolerance as manual/auto.

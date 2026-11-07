@@ -686,6 +686,36 @@ Stop on a receipt-hash mismatch or changed pair keys/counts. Investigate USD
 differences beyond the stated tolerance. The report preserves small differences
 even when they meet tolerance;row ordering is not a semantic bank-pair difference.
 
+## Task 12 isolated SSM execution-timeout probe (passed 7 November 2026)
+
+Observed Command ID `0c6bc427-bcd0-4cbf-b618-69a75ca1d8bf`: status Timed Out,
+detailed status Execution Timed Out,response137,start marker only. The displayed
+interval was30 seconds. Evidence:
+[12e SSM timeout](screenshots/12e-ssm-execution-timeout.png).
+
+Use the AWS-owned `AWS-RunShellScript` Command document on the existing instance
+in us-east-1. This is an isolated SSM timeout probe, not the graph runner or an
+integrated Step Functions timeout test. Leave the Role 4 document unchanged.
+
+Set the document's `executionTimeout` parameter to `30` seconds; leave its
+working directory empty. Use these commands:
+
+```sh
+printf '%s\n' 'ROLE4_TIMEOUT_PROBE_STARTED'
+sleep 90
+printf '%s\n' 'UNEXPECTED_TIMEOUT_PROBE_COMPLETED'
+```
+
+Send output to `s3://is459-g2t1-aml-athena-bucket/role4-ssm-logs/timeout-probe-20261107-01/`.
+The execution-timeout parameter is distinct from the command delivery timeout
+under additional settings; retain the delivery-timeout default. The script
+does not call Neo4j/Athena or write graph outputs. Expect invocation detail
+`Execution timed out` (API `ExecutionTimedOut`) and no completion marker. Record
+the actual Command ID,status,response code and output rather than assuming
+an exact response code. Save meaningful terminal evidence only after checking.
+This probe alone does not establish cancellation of database activity or
+failure propagation through the shared workflow; those require separate tests.
+
 ## Evidence and stopping
 
 - [Running container](screenshots/02k-neo4j-container-started.png)
