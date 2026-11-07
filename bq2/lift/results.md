@@ -66,3 +66,8 @@ These verify access, counts and catalog schema; they do not independently reprod
 [Own frequency screenshot](screenshots/09-dev-pattern-frequency.png) shows a completed query with 236 pattern rows, runtime 691 ms, queue 108 ms and 225.55 KB scanned. The first six visible pair patterns have counts: Reinvestment -> Reinvestment 44,822; Cash -> Cheque 29,245; Cash -> Credit Card 17,994; Cash -> Cash 16,196; Credit Card -> Reinvestment 12,288; Cheque -> Reinvestment 11,637. Full CSV and query ID were not supplied, so complete support totals and triple-pattern frequencies have not been reconciled from this image. These are occurrence counts, not laundering-risk rankings or final HI/LI findings.
 
 Next: check that the three development destination tables are absent and their S3 prefixes empty before running development/03_lift.sql. No development CTAS execution is claimed.
+
+
+## Development output-table check — 7 Nov 2026
+
+[Own console evidence](screenshots/09a-dev-output-table-check.png) shows the destination-table lookup completed with zero rows for bq2_lift_dev, bq2_tradeoff_dev and bq2_sankey_dev in is459_g2t1_aml. Runtime 412 ms, queue 104 ms, data scanned displayed as a dash; query ID not supplied. SQL attribution is from the accompanying conversation. This establishes no matching tables were returned in the current session; S3 prefix emptiness remains unverified. Next: inspect all three proposed S3 destinations before CTAS.

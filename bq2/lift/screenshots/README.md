@@ -13,6 +13,7 @@ Original PNGs copied from Xiang Ying's Desktop without editing. Desktop original
 | [07-dev-sequence-schema.png](07-dev-sequence-schema.png) | Own schema result: all 21 column names, types and ordinals match Role 5 v1, including bigint IDs, aligned arrays and both string partitions. Metrics/query ID not visible. |
 | [08-dev-source-validation.png](08-dev-source-validation.png) | All cleaned sample rows: 500,000 transactions and unique IDs, 35 laundering labels, 0 invalid labels, 0 null IDs. Runtime 1.191 sec, scanned 3.82 MB, queue 99 ms; query ID not supplied. |
 | [09-dev-pattern-frequency.png](09-dev-pattern-frequency.png) | Frequency query completed: 236 result rows; first six pair patterns visible. Runtime 691 ms, scanned 225.55 KB, queue 108 ms. Full output and query ID not supplied. |
+| [09a-dev-output-table-check.png](09a-dev-output-table-check.png) | Destination-table lookup completed with 0 rows for the three proposed development table names. Runtime 412 ms, queue 104 ms; scanned displayed as a dash. Does not establish S3 prefix emptiness. |
 
 The corrected schema screenshot is saved as `01-cleaned-schema.png` and agrees with the pasted 20-column result.
 
