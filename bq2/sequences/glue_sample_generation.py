@@ -28,11 +28,13 @@ class GenerationArgumentError(SystemExit):
 
 
 class _Parser(_PreflightParser):
-    def fail(self, reason, names=(), unparsed_count=0):
-        safe = [name if re.fullmatch(r"--[A-Za-z][A-Za-z0-9_-]{0,63}", name)
-                and not re.search(r"(?:AKIA|ASIA)[A-Z0-9]{16}", name) else "<redacted-option-name>" for name in names]
+    def fail(self, reason, names=(), unparsed_count=0, token_summary=None):
+        # Only allowlisted option names are safe; an unknown name can itself be a secret.
+        safe = [name for name in names if name in self._option_string_actions]
         diagnostic = dict(status="ARGUMENT_ERROR", reason=reason, arguments=sorted(set(safe)),
             unparsed_count=unparsed_count, generation_completed=False, values_logged=False)
+        if token_summary is not None:
+            diagnostic["unrecognized_token_summary"] = token_summary
         line = "GENERATION_ARGUMENTS | "+json.dumps(diagnostic, sort_keys=True)
         print(line, flush=True)
         print(line, file=sys.stderr, flush=True)
@@ -44,6 +46,39 @@ class _OpaqueRuntimeValue(_SingleValue):
         # Retain duplicate detection, but never retain opaque runtime values.
         super().__call__(parser, namespace, None, option_string)
         delattr(namespace, self.dest)
+
+
+def _summarize_unrecognized(tokens, unknown, option_strings):
+    """Fixed enums/counts only; no values, paths, lengths, hashes or argv indices.
+
+    This parser declares no positionals: every token before the first exact
+    recognized option is an extra. parse_known_args preserves those prefix
+    extras first, so repeated/interned values need no identity/value matching.
+    At most six categories times two positions are emitted in a fixed order.
+    """
+    first_option = next((i for i, token in enumerate(tokens)
+                         if token.split("=", 1)[0] in option_strings), len(tokens))
+    categories = ("empty", "single_dash_token", "boolean_literal", "entry_script_basename_match",
+                  "other_positional", "unknown_long_option")
+    positions = ("before_first_recognized_option", "after_first_recognized_option")
+    counts = {}
+    for index, token in enumerate(unknown):
+        if token == "":
+            category = "empty"
+        elif token.startswith("--"):
+            category = "unknown_long_option"
+        elif token.startswith("-"):
+            category = "single_dash_token"
+        elif token.lower() in ("true", "false"):
+            category = "boolean_literal"
+        elif token.replace("\\", "/").rsplit("/", 1)[-1] == "glue_sample_generation.py":
+            category = "entry_script_basename_match"
+        else:
+            category = "other_positional"
+        position = positions[0 if index < first_option else 1]
+        counts[category, position] = counts.get((category, position), 0) + 1
+    return [dict(category=category, position=position, count=counts[category, position])
+            for category in categories for position in positions if (category, position) in counts]
 
 
 def parse_arguments(argv=None):
@@ -88,7 +123,8 @@ def parse_arguments(argv=None):
     # No --conf, arbitrary dependencies, path overrides or synthetic test options.
     args, unknown = parser.parse_known_args(normalized)
     if unknown:
-        parser.fail("unrecognized_arguments", [v.split("=", 1)[0] for v in unknown if v.startswith("--")], len(unknown))
+        parser.fail("unrecognized_arguments", unparsed_count=len(unknown),
+                    token_summary=_summarize_unrecognized(normalized, unknown, parser._option_string_actions))
     return args
 
 

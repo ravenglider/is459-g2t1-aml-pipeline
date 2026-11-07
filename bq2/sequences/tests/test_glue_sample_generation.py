@@ -216,6 +216,90 @@ class ArgumentTests(unittest.TestCase):
                 self.assertNotIn(secret,str(caught.exception))
         self.assertNotIn(secret,out.getvalue()+err.getvalue())
 
+    def test_unknown_categories_and_positions_fail_before_dependencies(self):
+        cases=(("", "empty"), ("-private-short", "single_dash_token"), ("true", "boolean_literal"),
+               ("false", "boolean_literal"), ("TRUE", "boolean_literal"),
+               ("/private/path/glue_sample_generation.py", "entry_script_basename_match"),
+               (r"C:\private\glue_sample_generation.py", "entry_script_basename_match"),
+               ("glue_sample_generation.py", "entry_script_basename_match"),
+               ("private-evidence-text", "other_positional"), ("--private-option=private-value", "unknown_long_option"))
+        base=argv()+["--job-language","python"]
+        with patch.object(entry,"_initialize_dependencies") as initialize, \
+             patch("sys.stdout",new_callable=io.StringIO),patch("sys.stderr",new_callable=io.StringIO):
+            for token,category in cases:
+                for before in (True,False):
+                    args=[token,*base] if before else [*base,token]
+                    with self.subTest(category=category,before=before),self.assertRaises(entry.GenerationArgumentError) as caught:
+                        entry.main(args)
+                    diagnostic=caught.exception.diagnostic
+                    self.assertEqual(caught.exception.code,2)
+                    self.assertEqual(diagnostic["reason"],"unrecognized_arguments")
+                    self.assertEqual(diagnostic["unparsed_count"],1)
+                    self.assertEqual(diagnostic["arguments"],[])
+                    self.assertEqual(diagnostic["unrecognized_token_summary"],[dict(category=category,
+                        position="before_first_recognized_option" if before else "after_first_recognized_option",count=1)])
+                    self.assertFalse(diagnostic["values_logged"])
+                    self.assertFalse(diagnostic["generation_completed"])
+            initialize.assert_not_called()
+
+    def test_repeated_values_keep_correct_positions_and_diagnostics_are_bounded(self):
+        # Identical strings may be both consumed values and extras; .index(value)
+        # would misreport positions. Prefix and later extras must stay distinct.
+        base=argv()+["--enable-metrics","true","--job-language","python"]
+        args=["","true",*base,"","true"]
+        with patch("sys.stdout",new_callable=io.StringIO),patch("sys.stderr",new_callable=io.StringIO):
+            with self.assertRaises(entry.GenerationArgumentError) as caught:entry.parse_arguments(args)
+            summary=caught.exception.diagnostic["unrecognized_token_summary"]
+            self.assertEqual(summary,[dict(category=c,position=p,count=1) for c in ("empty","boolean_literal")
+                for p in ("before_first_recognized_option","after_first_recognized_option")])
+            repeated=["private-positional"]*1000
+            with self.assertRaises(entry.GenerationArgumentError) as caught:entry.parse_arguments([*repeated,*base,*repeated])
+        diagnostic=caught.exception.diagnostic
+        self.assertEqual(diagnostic["unparsed_count"],2000)
+        self.assertEqual(sum(r["count"] for r in diagnostic["unrecognized_token_summary"]),2000)
+        self.assertEqual(len(diagnostic["unrecognized_token_summary"]),2)
+        self.assertLess(len(str(caught.exception)),2048)
+
+    def test_diagnostic_summary_never_exposes_unknown_names_or_private_values(self):
+        secrets=("123456789012", "a"*64, "AKIA1234567890ABCDEF", "/private/customer/location", "private-evidence")
+        tokens=[*secrets,"--private-prefix-"+secrets[0],"--opaque="+secrets[-1],
+                "/private/customer/glue_sample_generation.py"]
+        with patch("sys.stdout",new_callable=io.StringIO) as out,patch("sys.stderr",new_callable=io.StringIO) as err:
+            with self.assertRaises(entry.GenerationArgumentError) as caught:entry.parse_arguments([*tokens,*argv()])
+        rendered=out.getvalue()+err.getvalue()+str(caught.exception)
+        for secret in (*secrets,"--private-prefix","--opaque","glue_sample_generation.py"):
+            self.assertNotIn(secret,rendered)
+        self.assertEqual(out.getvalue(),err.getvalue())
+        diagnostic=caught.exception.diagnostic
+        self.assertEqual(diagnostic["arguments"],[])
+        self.assertEqual(sum(r["count"] for r in diagnostic["unrecognized_token_summary"]),len(tokens))
+
+    def test_metrics_forms_and_installer_forms_preserve_valid_settings(self):
+        for metrics in (["--enable-metrics"],["--enable-metrics","true"],
+                        ["--enable-metrics=true"],["--enable-metrics",""]):
+            for inline_installer in (False,True):
+                args=argv()
+                if inline_installer:
+                    i=args.index("--python-modules-installer-option")
+                    args[i:i+2]=["--python-modules-installer-option=--no-index"]
+                args+=metrics
+                with self.subTest(metrics=metrics,inline_installer=inline_installer):
+                    self.assertEqual(entry.validate_arguments(entry.parse_arguments(args)),settings())
+                    with patch("sys.argv",["glue_sample_generation.py",*args]):
+                        self.assertEqual(entry.validate_arguments(entry.parse_arguments()),settings())
+
+    def test_duplicate_diagnostics_remain_known_names_without_unknown_summary(self):
+        cases=(argv()+["--enable-metrics","true","--enable-metrics=true"],argv()+["--ALLOW_AWS_WRITES=true"])
+        with patch.object(entry,"_initialize_dependencies") as initialize, \
+             patch("sys.stdout",new_callable=io.StringIO),patch("sys.stderr",new_callable=io.StringIO):
+            for args in cases:
+                with self.assertRaises(entry.GenerationArgumentError) as caught:entry.main(args)
+                diagnostic=caught.exception.diagnostic
+                self.assertEqual(diagnostic["reason"],"duplicate_argument")
+                self.assertEqual(diagnostic["unparsed_count"],0)
+                self.assertNotIn("unrecognized_token_summary",diagnostic)
+            initialize.assert_not_called()
+
 
 class RuntimeTests(unittest.TestCase):
     def test_checks_precede_coordinator_and_exact_settings_are_forwarded(self):
