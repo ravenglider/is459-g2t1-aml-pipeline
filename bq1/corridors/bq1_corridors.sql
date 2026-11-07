@@ -93,6 +93,3 @@ SELECT
 FROM is459_g2t1_aml.bq1_direct_corridors d
 LEFT JOIN is459_g2t1_aml.bq1_shared_attempt_value s
   ON d.from_bank = s.from_bank AND d.to_bank = s.to_bank;
-
--- ===== Check =====
--- SELECT * FROM is459_g2t1_aml.bq1_corridors_ranked ORDER BY extra_laundering_value_usd DESC LIMIT 10;
