@@ -34,7 +34,8 @@ All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-
 - Ready for Role 6: pinned sample queries and isolated `_dev` destinations, generated from the production SQL with regression checks.
 - Own development checks passed: counts reconcile (184,449 pairs; 33,931 triples) and all 21 names/types match v1. Original screenshots 06/07 are saved; count query ran in 837 ms and scanned 32.72 KB.
 - Own cleaned-sample source check passed: 500,000 rows and unique IDs, 35 laundering labels, no invalid labels or null IDs. Screenshot 08 saved; runtime 1.191 sec, scanned 3.82 MB.
-- Pending: method-pattern frequencies, remaining integration validation as needed, development analytical outputs, Tableau charts and full HI/LI publication.
+- Own sample pattern-frequency query completed: 236 result rows, runtime 691 ms, scanned 225.55 KB; screenshot 09 saved. Full frequency totals remain unreconciled because only the first page was supplied.
+- Pending: development destination checks, remaining integration validation as needed, development analytical outputs, Tableau charts and full HI/LI publication.
 
 ## How to run
 

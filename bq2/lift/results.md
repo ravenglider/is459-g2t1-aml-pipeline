@@ -59,3 +59,10 @@ Own console results supplied by Xiang Ying and inspected from the original scree
 - Evidence copied byte-for-byte from Desktop to the role screenshot folder; colon-separated Desktop names were normalized to folder/filename paths.
 
 These verify access, counts and catalog schema; they do not independently reproduce value or lineage acceptance. Source-ID uniqueness and label checks now pass for the cleaned sample. Next: inspect method-pattern frequencies using development/02_frequency.sql, retaining the sequence partition filters. No development CTAS, lift rankings or trade-off findings have been produced by these checks.
+
+
+## Development pattern frequencies — 7 Nov 2026
+
+[Own frequency screenshot](screenshots/09-dev-pattern-frequency.png) shows a completed query with 236 pattern rows, runtime 691 ms, queue 108 ms and 225.55 KB scanned. The first six visible pair patterns have counts: Reinvestment -> Reinvestment 44,822; Cash -> Cheque 29,245; Cash -> Credit Card 17,994; Cash -> Cash 16,196; Credit Card -> Reinvestment 12,288; Cheque -> Reinvestment 11,637. Full CSV and query ID were not supplied, so complete support totals and triple-pattern frequencies have not been reconciled from this image. These are occurrence counts, not laundering-risk rankings or final HI/LI findings.
+
+Next: check that the three development destination tables are absent and their S3 prefixes empty before running development/03_lift.sql. No development CTAS execution is claimed.
