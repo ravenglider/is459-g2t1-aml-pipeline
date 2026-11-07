@@ -11,6 +11,7 @@ Original PNGs copied from Xiang Ying's Desktop without editing. Desktop original
 | [05-bq2-input-table-check.png](05-bq2-input-table-check.png) | Only `transactions_clean` returned among the three queried table names. Runtime 460 ms, scanned 0.04 KB. |
 | [06-dev-sequence-counts.png](06-dev-sequence-counts.png) | Own console count check: 184,449 pairs, 33,931 triples, total 218,380. Runtime 837 ms, scanned 32.72 KB, queue 100 ms; result reuse toggle off. |
 | [07-dev-sequence-schema.png](07-dev-sequence-schema.png) | Own schema result: all 21 column names, types and ordinals match Role 5 v1, including bigint IDs, aligned arrays and both string partitions. Metrics/query ID not visible. |
+| [08-dev-source-validation.png](08-dev-source-validation.png) | All cleaned sample rows: 500,000 transactions and unique IDs, 35 laundering labels, 0 invalid labels, 0 null IDs. Runtime 1.191 sec, scanned 3.82 MB, queue 99 ms; query ID not supplied. |
 
 The corrected schema screenshot is saved as `01-cleaned-schema.png` and agrees with the pasted 20-column result.
 
