@@ -4,6 +4,28 @@
 
 Role 5 builds linked payment-method and currency sequences from Role 2's cleaned transactions, preserving transaction identities and laundering labels for Xiang Ying's Role 6 Athena analysis. The builder and supporting workflow have been tested locally. Release `_07` completed the sample-only AWS Glue preflight successfully in run09 (`SUCCEEDED`, `VALIDATED_READ_ONLY`). Real sequence generation and publication remain unfinished; this validation covers only the provided 500,000-row sample.
 
+## Sample Development Publication — 2026-11-07
+
+**Published, queryable and accepted for Role 6 sample integration testing:** `is459_g2t1_aml.bq2_sequences_dev` in `us-east-1`, partition `dataset='sample', start_date='2022-09-01'`. This dated update supersedes the earlier pending-publication status statements preserved below.
+
+- **218,380 sequences:** 184,449 pairs and 33,931 triples across 8 verified Parquet files.
+- **Exact approved 21-column v1 schema confirmed:** 19 data columns plus the string partition columns `dataset` and `start_date`.
+- Run: `sample_gen_20261107_c36493028788`; attempt: `attempt01_47ce5555c887`.
+- S3 development copy verified; Glue table and partition registered; original staging files and manifest unchanged.
+
+All four Athena acceptance queries returned `SUCCEEDED`:
+
+| Check | Query ID | Accepted result |
+|---|---|---|
+| Counts | `4971124e-fee8-4fc4-8551-07af320896d4` | 184,449 pairs; 33,931 triples |
+| Structure and labels | `ada6c118-152f-4619-9dc8-a533295ec722` | 218,380 rows; 0 bad rows |
+| Transaction-ID existence | `13bf9fdf-bd08-43a7-90e5-8332dae6ee39` | 0 missing members |
+| Full lineage | `d4e7f074-9d57-4c12-81a8-13ad4860abd0` | 0 link errors; 0 member errors; 0 duplicate/null source IDs in the selected source partitions |
+
+Evidence: [publication summary](evidence/role5-publication-summary.txt). The file-level archive `evidence/role5-publication-evidence.zip` is local-only, excluded from Git and unavailable through GitHub. The original staging manifest remains **`STAGED_VALIDATED`, `published=false`**; the separate manual development publication is supported by independent copy, Catalog and Athena acceptance evidence, not a `PUBLISHED` staging-manifest state.
+
+This is a **sample-only integration dataset, not the final HI/LI analytical dataset**. Output ownership is September 1, 2022, with continuation inputs through September 3. The sample may be truncated; publication does not establish completeness of the underlying HI-Medium or LI-Medium datasets.
+
 ## Sequence-building rules
 
 Here, **2-hop and 3-hop mean two and three transactions**, respectively. For consecutive transactions `a` and `b`, require:

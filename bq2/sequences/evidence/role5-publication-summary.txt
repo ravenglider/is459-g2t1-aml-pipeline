@@ -1,0 +1,58 @@
+ROLE 5 BQ2 SAMPLE PUBLICATION EVIDENCE SUMMARY
+
+Publication status: Successful; sample development publication accepted.
+Evidence basis: Verified results supplied by Ji Ning; no new AWS inspection
+or query execution was performed when preparing this summary.
+
+PUBLICATION
+Region: us-east-1
+Athena table: is459_g2t1_aml.bq2_sequences_dev
+Partition: dataset='sample', start_date='2022-09-01'
+Run: sample_gen_20261107_c36493028788
+Attempt: attempt01_47ce5555c887
+Verified Parquet files: 8
+Total sequences: 218,380
+Pairs (sequence_length=2): 184,449
+Triples (sequence_length=3): 33,931
+Exact Catalog schema: 19 data columns plus 2 string partition columns
+(dataset and start_date), totaling 21 columns.
+
+SUCCESSFUL ATHENA ACCEPTANCE QUERIES
+1. Counts
+   Query ID: 4971124e-fee8-4fc4-8551-07af320896d4
+   Status: SUCCEEDED
+   Result: 184,449 pairs; 33,931 triples.
+
+2. Structure and labels
+   Query ID: ada6c118-152f-4619-9dc8-a533295ec722
+   Status: SUCCEEDED
+   Result: 218,380 rows; 0 bad rows.
+
+3. Transaction-ID existence
+   Query ID: 13bf9fdf-bd08-43a7-90e5-8332dae6ee39
+   Status: SUCCEEDED
+   Result: 0 missing members.
+
+4. Full lineage
+   Query ID: d4e7f074-9d57-4c12-81a8-13ad4860abd0
+   Status: SUCCEEDED
+   Result: 0 link errors; 0 member errors; 0 duplicate/null source IDs.
+   Source identity checks apply to the selected sample source partitions.
+
+INTEGRITY AND SUPPORTING EVIDENCE
+- S3 development copy verified.
+- Glue table and partition registered.
+- Exact 21-column Catalog schema matched.
+- Original staging files and staging manifest unchanged.
+- File-level evidence stored in:
+  bq2/sequences/evidence/role5-publication-evidence.zip
+- Original staging manifest remains STAGED_VALIDATED with published=false.
+  Separate manual development publication is supported by independent copy,
+  Catalog registration and successful Athena acceptance evidence.
+
+SCOPE AND LIMITATIONS
+This is a sample-only Role 6 integration dataset. Sequences are owned by
+September 1, 2022, with continuation inputs through September 3, 2022.
+The source sample extract may be truncated; these checks do not establish
+completeness of the underlying HI-Medium or LI-Medium datasets.
+This publication is not final HI/LI analysis or production publication.
