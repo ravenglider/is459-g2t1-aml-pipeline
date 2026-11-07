@@ -37,7 +37,7 @@ Reads `transactions_clean`, aggregates laundering value by bank pair (direct and
 |  | Table | S3 path |
 |---|---|---|
 | Reads | is459_g2t1_aml.transactions_clean | s3://is459-g2t1-aml-processed-bucket/transactions_clean/ |
-| Reads | is459_g2t1_aml.bq1_graph_bank_features_hi01 (Role 4) | see bq1/neo4j/README.md |
+| Reads | is459_g2t1_aml.bq1_graph_bank_features_latest (Role 4, points at the most recent validated graph run) | see bq1/neo4j/README.md |
 | Writes | is459_g2t1_aml.bq1_direct_corridors | s3://is459-g2t1-aml-processed-bucket/bq1_direct_corridors/ |
 | Writes | is459_g2t1_aml.bq1_attempt_banks | s3://is459-g2t1-aml-processed-bucket/bq1_attempt_banks/ |
 | Writes | is459_g2t1_aml.bq1_shared_attempt_value | s3://is459-g2t1-aml-processed-bucket/bq1_shared_attempt_value/ |
@@ -50,7 +50,7 @@ Reads `transactions_clean`, aggregates laundering value by bank pair (direct and
 2. Run each statement separately, in order — Athena only runs one statement per click.
 3. On a rerun: run the 4 `DROP TABLE IF EXISTS` statements first, then **delete the contents of all four S3 folders above** before running the `CREATE TABLE` statements again — each table writes to a fixed folder now, and `DROP TABLE` does not delete the underlying files.
 4. Query `bq1_corridors_ranked` for the final ranked list.
-5. Once Role 4's `bq1_graph_bank_features_hi01` table is available, run `priority_list.sql` to build the final `bq1_priority_sharing_list`.
+5. `priority_list.sql` now runs automatically in the Step Functions pipeline after the Analytics step (a reset Lambda handles the drop + S3 cleanup each run). To rerun manually: run the `DROP TABLE IF EXISTS` in `priority_list.sql`, empty `s3://is459-g2t1-aml-processed-bucket/bq1_priority_sharing_list/`, then run the `CREATE TABLE` statement.
 
 ## Step Functions info for Sonia
 
@@ -62,6 +62,17 @@ Reads `transactions_clean`, aggregates laundering value by bank pair (direct and
 | Output S3 path | `s3://is459-g2t1-aml-processed-bucket/bq1_corridors_ranked/` |
 | Depends on | `is459_g2t1_aml.transactions_clean` (Role 2) only |
 | Typical run time on full data | All 4 queries complete in under 5 seconds combined on HI-Medium |
+
+**`priority_list.sql`** (wired into the pipeline by Sonia):
+
+| Field | Value |
+|---|---|
+| Job type | Athena (`arn:aws:states:::athena:startQueryExecution.sync`) |
+| Exact name | `priority_list.sql` (1 CREATE TABLE statement) |
+| Output table | `is459_g2t1_aml.bq1_priority_sharing_list` |
+| Output S3 path | `s3://is459-g2t1-aml-processed-bucket/bq1_priority_sharing_list/` |
+| Depends on | `bq1_corridors_ranked` (this folder) and `bq1_graph_bank_features_latest` (Role 4's graph run) |
+| Runs | After the Analytics step; reset Lambda handles drop + S3 cleanup each run |
 
 ## Contribution summary (for the Week 13 slide)
 
