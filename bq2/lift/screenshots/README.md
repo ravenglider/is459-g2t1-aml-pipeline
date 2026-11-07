@@ -14,6 +14,7 @@ Original PNGs copied from Xiang Ying's Desktop without editing. Desktop original
 | [08-dev-source-validation.png](08-dev-source-validation.png) | All cleaned sample rows: 500,000 transactions and unique IDs, 35 laundering labels, 0 invalid labels, 0 null IDs. Runtime 1.191 sec, scanned 3.82 MB, queue 99 ms; query ID not supplied. |
 | [09-dev-pattern-frequency.png](09-dev-pattern-frequency.png) | Frequency query completed: 236 result rows; first six pair patterns visible. Runtime 691 ms, scanned 225.55 KB, queue 108 ms. Full output and query ID not supplied. |
 | [09a-dev-output-table-check.png](09a-dev-output-table-check.png) | Destination-table lookup completed with 0 rows for the three proposed development table names. Runtime 412 ms, queue 104 ms; scanned displayed as a dash. Does not establish S3 prefix emptiness. |
+| [10a-dev-lift-created.png](10a-dev-lift-created.png) | Development lift CTAS completed successfully. Runtime 1.454 sec, queue 108 ms, scanned 454.24 KB. SQL/table attribution from the accompanying walkthrough; query ID not supplied. |
 
 The corrected schema screenshot is saved as `01-cleaned-schema.png` and agrees with the pasted 20-column result.
 
