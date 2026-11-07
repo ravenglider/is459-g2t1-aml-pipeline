@@ -27,12 +27,13 @@ All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-
 
 - Implemented: v1 interface alignment, separate dataset/length lift, 50/100/500 support policies, distinct-final targeting, frozen-rule LI checks and nonduplicated Sankey counts.
 - Twelve local analytical SQL regression tests pass; Athena array/lineage validation and actual integration are not yet executed.
-- Completed console evidence: schema, one-day HI missing-USD check and full HI/LI baselines, with [five screenshots](screenshots/README.md). Query IDs remain unrecorded. Earlier personal-account CLI failure does not describe team-console access.
+- Completed console evidence: schema, one-day HI missing-USD check and full HI/LI baselines, with [saved screenshots](screenshots/README.md). Query IDs remain unrecorded. Earlier personal-account CLI failure does not describe team-console access.
 - [Handoff and development mapping](input_contract.md) ready to share; no direct message or deployed builder is claimed.
 - [Four-view Tableau plan](../../viz/bq2_tableau.md) prepared; native workbook and real charts remain pending.
 - Ji Ning reports the development partition accepted: 218,380 sequences (184,449 pairs; 33,931 triples). Her four acceptance query IDs are recorded in the development runbook; these are teammate evidence, not Role 6 reruns.
 - Ready for Role 6: pinned sample queries and isolated `_dev` destinations, generated from the production SQL with regression checks.
-- Pending: personally verified integration results, measured outputs, Tableau charts and full HI/LI publication.
+- Own development checks passed: counts reconcile (184,449 pairs; 33,931 triples) and all 21 names/types match v1. Original screenshots 06/07 are saved; count query ran in 837 ms and scanned 32.72 KB.
+- Pending: own source-uniqueness check, remaining integration validation as needed, development analytical outputs, Tableau charts and full HI/LI publication.
 
 ## How to run
 

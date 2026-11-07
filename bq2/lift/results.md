@@ -47,4 +47,14 @@ Role 6 now consumes `any_laundering`, `final_txn_id` and ordered member arrays f
 
 Ji Ning reports the sample partition `bq2_sequences_dev / dataset=sample / start_date=2022-09-01` is published and has passed acceptance: 184,449 pairs, 33,931 triples, total 218,380. Counts query `4971124e-fee8-4fc4-8551-07af320896d4`, values query `ada6c118-152f-4619-9dc8-a533295ec722`, existence query `13bf9fdf-bd08-43a7-90e5-8332dae6ee39`, and lineage query `d4e7f074-9d57-4c12-81a8-13ad4860abd0` are reported SUCCEEDED with no value/member/link/source-ID errors. Exact 21-column schema and eight immutable-location Parquet files are reported verified.
 
-These are teammate-provided acceptance results, not independently retrieved AWS results in this session. Role 6's generated sample-specific queries and [runbook](development/README.md) are ready. Own counts/schema checks, CTAS execution, output reconciliation, query metrics and Tableau evidence remain to be recorded. No sample ranking or trade-off findings have been computed here.
+These are teammate-provided acceptance results, not independently retrieved AWS results in this session. Role 6's generated sample-specific queries and [runbook](development/README.md) are ready. Own counts/schema checks were subsequently recorded below. CTAS execution, output reconciliation and Tableau evidence remain pending. No sample ranking or trade-off findings have been computed here.
+
+## Role 6 development checks — 7 Nov 2026
+
+Own console results supplied by Xiang Ying and inspected from the original screenshots:
+
+- [Sequence count check](screenshots/06-dev-sequence-counts.png): 184,449 pairs and 33,931 triples, sum 218,380, matching the handoff. Displayed runtime 837 ms, queue 100 ms, scanned 32.72 KB; result reuse toggle off. Query ID not supplied.
+- [Schema check](screenshots/07-dev-sequence-schema.png): all 21 column names, data types and ordinal positions match the v1 interface. Signed transaction IDs are bigint/array(bigint), timestamps array(timestamp(3)), labels integer/array(integer), string arrays array(varchar), and dataset/start_date varchar. Metrics/query ID not visible.
+- Evidence copied byte-for-byte from Desktop to the role screenshot folder; colon-separated Desktop names were normalized to folder/filename paths.
+
+These verify access, counts and catalog schema; they do not independently reproduce value or lineage acceptance. Next own check: first query in development/01_validation.sql against all cleaned sample rows, checking unique IDs and labels before downstream joins. No development CTAS or analytical findings have been produced by these two checks.
