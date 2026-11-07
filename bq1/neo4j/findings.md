@@ -2,7 +2,7 @@
 
 Owner: Role 4. Manual run validated on 3 November 2026. BQ1: Which bank pairs are most involved in laundering, and which should prioritise information sharing?
 
-HI graph/import/GDS and the Athena join preview are validated. Final Browser scenes, HI USD-weight sensitivity and primary LI analysis are recorded below. The planned HI cutoff comparison is complete. Task 11 direct sample/HI/repeat trials passed. Task 12 SSM sample success/output acceptance, duplicate-run rejection and an isolated shell-timeout probe passed. Role 3 adoption, output-validation failure testing and Sonia-owned end-to-end Step Functions integration remain pending. This is a findings record, not a claim that all Role 4 deliverables are complete.
+HI graph/import/GDS and the Athena join preview are validated. Final Browser scenes, HI USD-weight sensitivity and primary LI analysis are recorded below. The planned HI cutoff comparison is complete. Task 11 direct sample/HI/repeat trials passed. Task 12 SSM sample success/output acceptance,duplicate-run rejection,isolated shell-timeout and read-only feature-validator probes passed. The initial handoff was sent to Sonia. Role 3 adoption and Sonia-owned end-to-end Step Functions acceptance remain pending; live full-run publication suppression under injected faults was not established by the read-only probe. This is a findings record, not a claim that all Role 4 deliverables are complete.
 
 ## Population and reconciliation
 
@@ -452,9 +452,9 @@ dataset sample,35 evidence/cross-bank transactions,$434634.33 for both totals,
 match this run. Independent coverage evidence:
 [12c Athena validation](screenshots/12c-sample-ssm-features-athena-validation.png).
 The SSM sample success/output acceptance check passed. Duplicate-run rejection
-and an isolated shell-timeout probe are recorded below; output-validation failure
-and Sonia-owned Step Functions acceptance remain pending. No complete Task 12
-claim is made.
+and an isolated shell-timeout probe, plus read-only validator rejection, are
+recorded below. Sonia-owned Step Functions acceptance remains pending.
+No complete Task 12 claim is made.
 
 ### SSM duplicate-run rejection
 
@@ -484,10 +484,35 @@ the completion marker was absent. The displayed start/finish interval was
 Evidence: [12e SSM timeout](screenshots/12e-ssm-execution-timeout.png).
 This confirms timeout reporting for the isolated shell probe. It did not run
 the graph runner and does not establish database-query cancellation or
-Step Functions timeout/failure handling. Output-validation failure testing and
-shared-workflow integration remain pending.
+Step Functions timeout/failure handling. The read-only output-validator probe
+is recorded next; shared-workflow integration remains pending.
+
+### Read-only feature-validator probe (7 November 2026)
+
+Command `438554c5-5991-4b71-8ea3-1cc1edeb35cb` reported status/detailed status
+`Failed`, response code `1`. The pasted traceback reaches the deployed `validate_features`
+row-count check and ends with `RuntimeError: Incomplete feature export`.
+Evidence: [12f validator rejection](screenshots/12f-ssm-feature-validation-rejected.png).
+The user also confirmed both existing stdout markers:
+`ORIGINAL_FEATURES_VALIDATED: 42 rows` and
+`INJECTED_IN_MEMORY_TRUNCATION: 41 rows; expected 42`.
+Together with the exact error and response code 1, these establish that original features
+passed and the intentionally incomplete in-memory copy was rejected. The
+component probe passed. The screenshot has Output collapsed and shows only
+part of the error traceback; the full markers/error are recorded in this text.
+This calls the real validator on a read-only/in-memory copy, not the complete
+runner; it does not establish live publication suppression or integrated
+Step Functions failure propagation. No repeated graph trial is needed.
 
 ## Remaining validation and submission work
+
+The manual graph analysis and the planned component acceptance checks are
+complete within their documented scopes. There is no identified missing
+implementation file from the original Role 4 graph breakdown. This is not a
+claim that every team/submission deliverable is finished. The remaining work
+includes Sonia's integration and Ryan's adoption, as well as final cost/report/
+slides/video contributions. The independent Task 11 sample feature-query ID is
+still a minor evidence-reference follow-up; it must not be invented.
 
 - Ownership confirmed 7 November 2026: Role 4 sends Sonia the tested command,
   output table/S3 path, dependencies, runtime and component-test evidence.
@@ -495,8 +520,12 @@ shared-workflow integration remain pending.
   Role 4 records the evidence she supplies. No shared pipeline deployment was
   performed by Role 4 during the component tests documented here.
 - Direct EC2 runner trials passed;retain measured run/release/output references.
-- SSM sample success,duplicate-run rejection and isolated shell-timeout checks
-  passed; output-validation failure and integrated failure/timeout checks remain.
+- SSM sample success,duplicate-run rejection,isolated shell-timeout and read-only
+  feature-validator rejection checks passed. Full-run publication suppression
+  under injected faults and integrated failure/timeout checks are not established
+  by the read-only probe; Sonia owns shared-workflow acceptance.
+- User confirmed the tested graph interface was personally sent to Sonia on
+  7 November 2026; provide her the subsequent validator-probe result if needed.
 - Sonia's integrated execution, accepted-run consumption and EC2 lifecycle agreement.
 - Ryan's final priority-list adoption and final team report/slides/video artefacts.
 

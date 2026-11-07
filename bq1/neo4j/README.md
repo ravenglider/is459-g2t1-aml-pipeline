@@ -21,7 +21,15 @@ Builds bank and account graphs from cleaned laundering-labelled transactions for
 | [run_graph.py](run_graph.py), [test_run_graph.py](test_run_graph.py) | Direct EC2 repeatability and SSM sample success passed; integrated pipeline acceptance pending with Sonia |
 | [screenshots/](screenshots/) | Named evidence images only |
 
-Manual sample/HI/LI analyses, Browser scenes and the planned HI weighting/cutoff comparisons are complete based on reported executions and saved evidence. The accepted HI graph was restored after manual comparisons and its stored properties were later preserved through the Task 11 trials. Task 11 direct EC2 validation is complete: one sample and two fresh-ID HI runs passed output, baseline and repeatability checks. Task 12 SSM sample success/output acceptance, duplicate-ID rejection and an isolated shell-timeout probe passed on 7 November 2026. Current Active labels may point to the last automated sample run. Shared Step Functions integration belongs to Sonia and remains unverified.
+Manual sample/HI/LI analyses, Browser scenes and the planned HI weighting/cutoff
+comparisons are complete based on reported executions and saved evidence.
+Task 11 direct EC2 validation is complete: one sample and two fresh-ID HI runs
+passed output, baseline and repeatability checks, preserving the accepted HI
+graph's stored properties. Task 12 SSM sample success/output acceptance,
+duplicate-ID rejection, an isolated shell-timeout probe and read-only
+feature-validator rejection passed on 7 November 2026. Current Active labels may
+point to the last automated sample run. The initial Sonia handoff was sent.
+Shared Step Functions integration belongs to Sonia and remains unverified.
 
 ## AWS resources
 
@@ -85,7 +93,21 @@ Bank keys are `(scope,bank_id)`; account keys are `(scope,bank_id,account_id)`. 
 | Observed direct runtime | HI run01:63.522618s; fresh HI run02:52.480852s; sample:37.155682s. Not an SSM/end-to-end SLA or billed EC2 uptime |
 | Completion/failure handling | Poll terminal SSM outcome with bounded timeout; require zero response code and validated outputs; coordinate EC2 lifecycle and exclusive graph use |
 
-Sonia owns changes to the shared `BQ1_Neo4jLoad` placeholder, state machine and orchestration permissions. Role 4 sends her the tested command/interface, output table/S3 path, dependencies, runtime and evidence, following [the ingestion handoff](../../docs/ingestion-handoff.md#how-your-job-gets-added). Role 4 does not edit/deploy the shared Step Functions workflow. Its end-to-end graph integration remains unverified until Sonia supplies execution evidence. Direct trials and the SSM sample success/output check passed; duplicate-ID rejection and an isolated SSM shell-timeout probe also passed. Output-validation failure and integrated failure/timeout handling remain separate checks. The runner enforces the primary cutoff; it does not implement uncapped comparisons or start/stop EC2. Personal messages and draft orchestration configuration stay local; Sonia retains adopted configuration in the team's pipeline source.
+Sonia owns changes to the shared `BQ1_Neo4jLoad` placeholder, state machine and
+orchestration permissions. Role 4 sent her the tested command/interface, output
+table/S3 path, dependencies, runtime and evidence, following
+[the ingestion handoff](../../docs/ingestion-handoff.md#how-your-job-gets-added).
+Role 4 does not edit or deploy the shared Step Functions workflow. End-to-end
+integration remains unverified until Sonia supplies execution evidence.
+
+Direct trials, SSM sample output acceptance, duplicate-ID rejection, the isolated
+shell-timeout probe and read-only feature-validator rejection passed. The last
+probe checked the real validator on a deliberately truncated in-memory copy;
+it did not execute a full failed graph run or prove live publication suppression.
+Integrated failure/timeout handling remains Sonia-owned acceptance. The runner
+enforces the primary cutoff; it does not implement uncapped comparisons or
+start/stop EC2. Personal messages and draft orchestration configuration stay
+local; Sonia retains adopted configuration in the team's pipeline source.
 
 Validated direct-run performance instrumentation records stage wall times, Athena execution statistics and result-download times in the success receipt; algorithm timings include their projection/estimate preparation. The final log elapsed time includes success-receipt publication, while the receipt explicitly records elapsed time before its own publication. Direct wall times are measured and recorded in findings.md; EC2 billed uptime, cost and observed peak RAM have not been established.
 
@@ -95,4 +117,4 @@ Built and manually validated the bank/account graph workflow, source-supported p
 
 Accepted HI: **5,159 banks, 29,374 corridors, 34,552 cross-bank transactions, 113 communities**; feature join preserves **1,697,382 rows**. LI: **4,924 banks, 142 communities**. Uncapped HI: **5,166 banks, 111 communities**, with **9/10** top intermediaries shared with filtered HI. Detailed results and weighting caveats are in [findings.md](findings.md).
 
-Remaining: Ryan's final priority-list adoption, any required remaining component failure checks, Sonia handoff/integration evidence, and final team report/slides/videos. The Browser substitution needs recording in the team submission. Personal guide/notes, helpers, CSVs and coordination drafts remain gitignored.
+Remaining: Ryan's final priority-list adoption/source-freshness confirmation, Sonia's integrated execution/failure evidence and EC2 lifecycle agreement, and final team report/slides/videos. Performance stages and GDS estimates are recorded; EC2 billed uptime and cost still need a sourced calculation. The independent Task11 sample feature query ID was not supplied; recover it from history if available without rerunning the completed job. No full-run publication-suppression claim is made from the read-only validator probe. The Browser substitution needs recording in the team submission. Personal guide/notes, helpers, CSVs and coordination drafts remain gitignored.

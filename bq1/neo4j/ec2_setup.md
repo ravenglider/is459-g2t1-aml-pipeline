@@ -13,8 +13,11 @@ tolerances; the community partitions matched in the compared runs.
 
 The commands below are sectioned reproduction records, not instructions to
 rerun completed trials. All named run IDs/logs/baseline files already exist.
-Task12 SSM/failure/timeout/integrated acceptance is still pending. Current
-Active labels may select run02; verify scope before manual analysis. No accepted
+Task12 sample SSM success/output acceptance,duplicate-ID rejection,isolated shell
+timeout and read-only output-validator rejection subsequently passed on7 November
+2026; see findings.md. Shared Step Functions integration remains Sonia-owned
+and pending. Current Active labels may select the last SSM sample; verify scope
+before manual analysis. No accepted
 manual graph restoration or additional runner execution is required to mark
 Task11 complete. EC2 uptime/cost and peak-memory reporting remain Task13 work.
 
@@ -291,7 +294,7 @@ with the saved baseline without overwriting it. Post-trial verification subseque
 
 Executed 6 November2026: sample-auto-20261106-01 returned SUCCEEDED in37.155682s,
 runner exit0/log exit0. Stage times are recorded in findings.md. Do not rerun the
-same ID/log. Published outputs, accepted-HI preservation and independent feature coverage passed. Subsequent full-HI/repeat trials passed; SSM/integrated trials remain pending.
+same ID/log. Published outputs, accepted-HI preservation and independent feature coverage passed. Subsequent full-HI/repeat trials and the Task12 SSM sample/component checks passed; Sonia-owned integrated execution remains pending.
 
 Prerequisites: the verified release above, saved HI baseline, ready Neo4j/GDS,
 and no concurrent manual graph analysis or ETL source refresh. The trial uses a
@@ -715,6 +718,96 @@ the actual Command ID,status,response code and output rather than assuming
 an exact response code. Save meaningful terminal evidence only after checking.
 This probe alone does not establish cancellation of database activity or
 failure propagation through the shared workflow; those require separate tests.
+
+## Task 12 read-only feature-validator probe (passed 7 November 2026)
+
+Command `438554c5-5991-4b71-8ea3-1cc1edeb35cb` returned Failed,response1 and
+`RuntimeError: Incomplete feature export`. The user confirmed both stdout
+markers:original42 rows validated and41 rows deliberately presented instead of42.
+Evidence: [12f validator rejection](screenshots/12f-ssm-feature-validation-rejected.png).
+This verifies the validator-only probe,not full-run publication suppression.
+
+Use AWS-owned `AWS-RunShellScript` on the existing host with executionTimeout120
+seconds. The following commands import the hash-verified deployed runner, read
+the accepted SSM sample feature CSV without saving it locally, validate the full
+42-row output, then deliberately remove one row in memory. The real validator
+must raise `Incomplete feature export`, producing a nonzero command response.
+Use S3 command-log prefix `role4-ssm-logs/feature-validation-probe-20261107-01`.
+
+```bash
+set -eu
+python3 - <<'PY'
+import csv
+import hashlib
+import importlib.util
+import io
+from pathlib import Path
+import subprocess
+
+source = Path('/home/ssm-user/role4/code/role4-20261106-01/run_graph.py')
+expected = '6d4765d61489e61832c668aee4c951518d66776b2eee42e76f4bd55f74757a9d'
+if hashlib.sha256(source.read_bytes()).hexdigest() != expected:
+    raise RuntimeError('Runner hash mismatch; stop this probe')
+spec = importlib.util.spec_from_file_location('role4_probe_runner', source)
+runner = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(runner)
+uri = ('s3://is459-g2t1-aml-processed-bucket/bq1_graph_results/'
+       'sample-ssm-20261107-01/bank_features/bank_features.csv')
+payload = subprocess.check_output([
+    'aws', 's3', 'cp', uri, '-', '--region', 'us-east-1', '--only-show-errors'])
+reader = csv.DictReader(io.StringIO(payload.decode('utf-8-sig')))
+if reader.fieldnames != runner.FEATURE_HEADER:
+    raise RuntimeError('Unexpected feature header; stop this probe')
+records = [dict(bank_id=r['bank_id'], betweenness=float(r['betweenness']),
+                community_id=int(r['community_id'])) for r in reader]
+runner.validate_features(records, {'banks': 42})
+print('ORIGINAL_FEATURES_VALIDATED: 42 rows', flush=True)
+records = records[:-1]
+print('INJECTED_IN_MEMORY_TRUNCATION: 41 rows; expected 42', flush=True)
+runner.validate_features(records, {'banks': 42})
+raise RuntimeError('UNEXPECTED: validator accepted truncated features')
+PY
+```
+
+This probe calls the production validation function but never calls `run()`,
+publication functions, Neo4j or Athena. It does not modify accepted data or
+create graph outputs. A failed invocation with the two markers and exact
+`Incomplete feature export` error establishes validator rejection through SSM;
+unrelated errors do not count. It does not prove live full-run publication
+suppression or Step Functions failure propagation. The existing offline
+simulated-run test separately checks that a truncated export cannot publish
+features or success; preserve that distinction in the handoff.
+
+## Task 12 read-only invocation and receipt inspection
+
+These inspect completed trials; they do not send commands or rerun the graph.
+Use an AWS identity with access to invocation details. In Bash:
+
+```bash
+aws ssm get-command-invocation \
+  --command-id 438554c5-5991-4b71-8ea3-1cc1edeb35cb \
+  --instance-id i-0125056b848e5634a \
+  --region us-east-1 \
+  --query '{Status:Status,Details:StatusDetails,ResponseCode:ResponseCode,Output:StandardOutputContent,Error:StandardErrorContent}'
+```
+
+The same inspection works with the other recorded Command IDs in findings.md.
+Inspect the accepted SSM sample success receipt (requires S3 read access):
+
+```bash
+set -o pipefail
+aws s3 cp \
+  s3://is459-g2t1-aml-processed-bucket/bq1_graph_results/sample-ssm-20261107-01/success.json \
+  - --region us-east-1 --only-show-errors \
+| python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({k:d.get(k) for k in ["status","run_id","dataset","totals","louvain","feature_table","feature_location"]},indent=2))'
+```
+
+For the before/after receipt fingerprint used in the duplicate-ID test, replace
+the Python command after the pipe with `sha256sum`. The observed fingerprint was
+`065cf54575d145c033a4399ac966e7c84d6009f9e2b583b2410af71de5cd8f56` both times.
+Component probes do not update the released runner or shared Step Functions.
+The exact tested runner sources and hashes remain those of release
+`role4-20261106-01`; no redeployment is required for these documentation updates.
 
 ## Evidence and stopping
 
