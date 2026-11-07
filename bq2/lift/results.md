@@ -71,3 +71,12 @@ Next: check that the three development destination tables are absent and their S
 ## Development output-table check — 7 Nov 2026
 
 [Own console evidence](screenshots/09a-dev-output-table-check.png) shows the destination-table lookup completed with zero rows for bq2_lift_dev, bq2_tradeoff_dev and bq2_sankey_dev in is459_g2t1_aml. Runtime 412 ms, queue 104 ms, data scanned displayed as a dash; query ID not supplied. SQL attribution is from the accompanying conversation. This establishes no matching tables were returned in the current session; S3 prefix emptiness remains unverified. Next: inspect all three proposed S3 destinations before CTAS.
+
+
+## Development lift creation — 7 Nov 2026
+
+Xiang Ying confirmed in chat that all three proposed development S3 output prefixes were empty before creation; this is a user-reported check, not a retrieved S3 listing. The preceding destination-table lookup returned no matching names.
+
+[Own completion screenshot](screenshots/10a-dev-lift-created.png) shows the development lift CTAS completed successfully: runtime 1.454 sec, queue 108 ms, scanned 454.24 KB; result reuse toggle off. The walkthrough identifies the statement as development/03_lift.sql creating is459_g2t1_aml.bq2_lift_dev at s3://is459-g2t1-aml-processed-bucket/bq2_lift_dev/sample_20220901/. The crop does not display SQL or query ID; table attribution comes from the accompanying conversation.
+
+Next: SELECT sample rankings and reconcile support totals by length for one cutoff. CTAS completion does not yet establish ranking values or output reconciliation. Trade-off/Sankey creation, Tableau views and final HI/LI findings remain pending.
