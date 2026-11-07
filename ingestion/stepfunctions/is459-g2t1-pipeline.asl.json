@@ -100,7 +100,7 @@
     },
     "Analytics": {
       "Type": "Parallel",
-      "Comment": "BQ1 and BQ2 run at the same time once transactions_clean exists",
+      "Comment": "BQ1 corridors, BQ1 graph (Role 4) and BQ2 run in parallel once transactions_clean exists",
       "ResultPath": "$.analytics",
       "Branches": [
         {
@@ -222,13 +222,426 @@
                 }
               },
               "ResultPath": null,
-              "Next": "BQ1_Neo4jLoad"
-            },
-            "BQ1_Neo4jLoad": {
-              "Type": "Pass",
-              "Comment": "Role 4 PLACEHOLDER. Likely aws-sdk:ssm:sendCommand to run the import script on the Neo4j EC2 instance",
-              "Result": "placeholder: neo4j graph loaded",
               "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "Graph_Init",
+          "States": {
+            "Graph_Init": {
+              "Type": "Pass",
+              "Comment": "Role 4: fresh run ID per execution (runner rejects reused IDs)",
+              "Parameters": {
+                "runId.$": "States.Format('sf-{}', States.UUID())",
+                "dataset": "HI-Medium",
+                "startedByPipeline": false
+              },
+              "ResultPath": "$.graph",
+              "Next": "Graph_CheckInstance"
+            },
+            "Graph_CheckInstance": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ec2:describeInstances",
+              "Parameters": {
+                "InstanceIds": [
+                  "i-0125056b848e5634a"
+                ]
+              },
+              "ResultSelector": {
+                "state.$": "$.Reservations[0].Instances[0].State.Name"
+              },
+              "ResultPath": "$.graph.instance",
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "ResultPath": "$.graph.error",
+                  "Next": "Graph_CleanupOnFailure"
+                }
+              ],
+              "Next": "Graph_InstanceState?"
+            },
+            "Graph_InstanceState?": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.graph.instance.state",
+                  "StringEquals": "running",
+                  "Next": "Graph_CheckSsmOnline"
+                },
+                {
+                  "Variable": "$.graph.instance.state",
+                  "StringEquals": "stopped",
+                  "Next": "Graph_StartInstance"
+                },
+                {
+                  "Or": [
+                    {
+                      "Variable": "$.graph.instance.state",
+                      "StringEquals": "pending"
+                    },
+                    {
+                      "Variable": "$.graph.instance.state",
+                      "StringEquals": "stopping"
+                    }
+                  ],
+                  "Next": "Graph_WaitInstance"
+                }
+              ],
+              "Default": "Graph_CleanupOnFailure"
+            },
+            "Graph_StartInstance": {
+              "Type": "Task",
+              "Comment": "Only starts the instance if it was stopped; remembers this so it is stopped again afterwards",
+              "Resource": "arn:aws:states:::aws-sdk:ec2:startInstances",
+              "Parameters": {
+                "InstanceIds": [
+                  "i-0125056b848e5634a"
+                ]
+              },
+              "ResultPath": null,
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "ResultPath": "$.graph.error",
+                  "Next": "Graph_CleanupOnFailure"
+                }
+              ],
+              "Next": "Graph_MarkStarted"
+            },
+            "Graph_MarkStarted": {
+              "Type": "Pass",
+              "Result": true,
+              "ResultPath": "$.graph.startedByPipeline",
+              "Next": "Graph_WaitInstance"
+            },
+            "Graph_WaitInstance": {
+              "Type": "Wait",
+              "Seconds": 20,
+              "Next": "Graph_CheckInstance"
+            },
+            "Graph_CheckSsmOnline": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ssm:describeInstanceInformation",
+              "Parameters": {
+                "Filters": [
+                  {
+                    "Key": "InstanceIds",
+                    "Values": [
+                      "i-0125056b848e5634a"
+                    ]
+                  }
+                ]
+              },
+              "ResultSelector": {
+                "pings.$": "$.InstanceInformationList[*].PingStatus"
+              },
+              "ResultPath": "$.graph.ssm",
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "ResultPath": "$.graph.error",
+                  "Next": "Graph_CleanupOnFailure"
+                }
+              ],
+              "Next": "Graph_SsmOnlineFlag"
+            },
+            "Graph_SsmOnlineFlag": {
+              "Type": "Pass",
+              "Parameters": {
+                "online.$": "States.ArrayContains($.graph.ssm.pings, 'Online')"
+              },
+              "ResultPath": "$.graph.ssmOnline",
+              "Next": "Graph_SsmOnline?"
+            },
+            "Graph_SsmOnline?": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "And": [
+                    {
+                      "Variable": "$.graph.ssmOnline.online",
+                      "BooleanEquals": true
+                    },
+                    {
+                      "Variable": "$.graph.startedByPipeline",
+                      "BooleanEquals": true
+                    }
+                  ],
+                  "Next": "Graph_WaitForNeo4j"
+                },
+                {
+                  "Variable": "$.graph.ssmOnline.online",
+                  "BooleanEquals": true,
+                  "Next": "Graph_RunGraph"
+                }
+              ],
+              "Default": "Graph_WaitSsm"
+            },
+            "Graph_WaitSsm": {
+              "Type": "Wait",
+              "Seconds": 15,
+              "Next": "Graph_CheckSsmOnline"
+            },
+            "Graph_WaitForNeo4j": {
+              "Type": "Wait",
+              "Comment": "Fresh boot: give Docker/Neo4j time to start before the runner connects",
+              "Seconds": 90,
+              "Next": "Graph_RunGraph"
+            },
+            "Graph_RunGraph": {
+              "Type": "Task",
+              "Comment": "Role 4: run the graph runner via her SSM document",
+              "Resource": "arn:aws:states:::aws-sdk:ssm:sendCommand",
+              "Parameters": {
+                "DocumentName": "is459-g2t1-role4-graph",
+                "DocumentVersion": "1",
+                "InstanceIds": [
+                  "i-0125056b848e5634a"
+                ],
+                "Parameters": {
+                  "runId.$": "States.Array($.graph.runId)",
+                  "dataset.$": "States.Array($.graph.dataset)"
+                },
+                "TimeoutSeconds": 600,
+                "Comment": "IS459 G2T1 pipeline graph run"
+              },
+              "ResultSelector": {
+                "commandId.$": "$.Command.CommandId"
+              },
+              "ResultPath": "$.graph.command",
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "ResultPath": "$.graph.error",
+                  "Next": "Graph_CleanupOnFailure"
+                }
+              ],
+              "Next": "Graph_WaitCommand"
+            },
+            "Graph_WaitCommand": {
+              "Type": "Wait",
+              "Seconds": 15,
+              "Next": "Graph_GetCommandStatus"
+            },
+            "Graph_GetCommandStatus": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ssm:getCommandInvocation",
+              "Parameters": {
+                "CommandId.$": "$.graph.command.commandId",
+                "InstanceId": "i-0125056b848e5634a"
+              },
+              "ResultSelector": {
+                "status.$": "$.Status",
+                "responseCode.$": "$.ResponseCode"
+              },
+              "ResultPath": "$.graph.commandResult",
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Ssm.InvocationDoesNotExistException"
+                  ],
+                  "IntervalSeconds": 5,
+                  "MaxAttempts": 6,
+                  "BackoffRate": 1.5
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "ResultPath": "$.graph.error",
+                  "Next": "Graph_CleanupOnFailure"
+                }
+              ],
+              "Next": "Graph_CommandDone?"
+            },
+            "Graph_CommandDone?": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "And": [
+                    {
+                      "Variable": "$.graph.commandResult.status",
+                      "StringEquals": "Success"
+                    },
+                    {
+                      "Variable": "$.graph.commandResult.responseCode",
+                      "NumericEquals": 0
+                    }
+                  ],
+                  "Next": "Graph_ReadReceipt"
+                },
+                {
+                  "Or": [
+                    {
+                      "Variable": "$.graph.commandResult.status",
+                      "StringEquals": "Success"
+                    },
+                    {
+                      "Variable": "$.graph.commandResult.status",
+                      "StringEquals": "Failed"
+                    },
+                    {
+                      "Variable": "$.graph.commandResult.status",
+                      "StringEquals": "Cancelled"
+                    },
+                    {
+                      "Variable": "$.graph.commandResult.status",
+                      "StringEquals": "TimedOut"
+                    }
+                  ],
+                  "Next": "Graph_CleanupOnFailure"
+                }
+              ],
+              "Default": "Graph_WaitCommand"
+            },
+            "Graph_ReadReceipt": {
+              "Type": "Task",
+              "Comment": "Validate the run-specific success.json the runner publishes last",
+              "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+              "Parameters": {
+                "Bucket": "is459-g2t1-aml-processed-bucket",
+                "Key.$": "States.Format('bq1_graph_results/{}/success.json', $.graph.runId)"
+              },
+              "ResultSelector": {
+                "receipt.$": "States.StringToJson($.Body)"
+              },
+              "ResultPath": "$.graph.receipt",
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "ResultPath": "$.graph.error",
+                  "Next": "Graph_CleanupOnFailure"
+                }
+              ],
+              "Next": "Graph_ReceiptValid?"
+            },
+            "Graph_ReceiptValid?": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "And": [
+                    {
+                      "Variable": "$.graph.receipt.receipt.status",
+                      "StringEquals": "SUCCEEDED"
+                    },
+                    {
+                      "Variable": "$.graph.receipt.receipt.run_id",
+                      "StringEqualsPath": "$.graph.runId"
+                    },
+                    {
+                      "Variable": "$.graph.receipt.receipt.dataset",
+                      "StringEqualsPath": "$.graph.dataset"
+                    },
+                    {
+                      "Variable": "$.graph.receipt.receipt.feature_table",
+                      "IsPresent": true
+                    }
+                  ],
+                  "Next": "Graph_UpdateLatestView"
+                }
+              ],
+              "Default": "Graph_CleanupOnFailure"
+            },
+            "Graph_UpdateLatestView": {
+              "Type": "Task",
+              "Comment": "Stable name for Role 3 / Tableau: points at this run's validated feature table",
+              "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+              "Parameters": {
+                "QueryString.$": "States.Format('CREATE OR REPLACE VIEW is459_g2t1_aml.bq1_graph_bank_features_latest AS SELECT * FROM {}', $.graph.receipt.receipt.feature_table)",
+                "WorkGroup": "primary",
+                "QueryExecutionContext": {
+                  "Database": "is459_g2t1_aml"
+                },
+                "ResultConfiguration": {
+                  "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+                }
+              },
+              "ResultPath": null,
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "ResultPath": "$.graph.error",
+                  "Next": "Graph_CleanupOnFailure"
+                }
+              ],
+              "Next": "Graph_StopIfStarted?"
+            },
+            "Graph_StopIfStarted?": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.graph.startedByPipeline",
+                  "BooleanEquals": true,
+                  "Next": "Graph_StopInstance"
+                }
+              ],
+              "Default": "Graph_Done"
+            },
+            "Graph_StopInstance": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ec2:stopInstances",
+              "Parameters": {
+                "InstanceIds": [
+                  "i-0125056b848e5634a"
+                ]
+              },
+              "ResultPath": null,
+              "Next": "Graph_Done"
+            },
+            "Graph_Done": {
+              "Type": "Succeed"
+            },
+            "Graph_CleanupOnFailure": {
+              "Type": "Choice",
+              "Comment": "On any failure: stop the instance only if this run started it",
+              "Choices": [
+                {
+                  "Variable": "$.graph.startedByPipeline",
+                  "BooleanEquals": true,
+                  "Next": "Graph_StopOnFailure"
+                }
+              ],
+              "Default": "Graph_Failed"
+            },
+            "Graph_StopOnFailure": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ec2:stopInstances",
+              "Parameters": {
+                "InstanceIds": [
+                  "i-0125056b848e5634a"
+                ]
+              },
+              "ResultPath": null,
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "ResultPath": null,
+                  "Next": "Graph_Failed"
+                }
+              ],
+              "Next": "Graph_Failed"
+            },
+            "Graph_Failed": {
+              "Type": "Fail",
+              "Error": "Role4GraphFailed",
+              "Cause": "Role 4 graph run failed: see the failed step, SSM command output, or bq1_graph_results/<runId>/ in S3"
             }
           }
         },
@@ -250,6 +663,43 @@
           }
         }
       ],
+      "Next": "BQ1_PriorityReset"
+    },
+    "BQ1_PriorityReset": {
+      "Type": "Task",
+      "Comment": "Role 1 helper: drop bq1_priority_sharing_list and empty its folder so the CTAS can rerun",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "is459-g2t1-reset-outputs",
+        "Payload": {
+          "bucket": "is459-g2t1-aml-processed-bucket",
+          "database": "is459_g2t1_aml",
+          "outputs": [
+            {
+              "table": "bq1_priority_sharing_list",
+              "prefix": "bq1_priority_sharing_list/"
+            }
+          ]
+        }
+      },
+      "ResultPath": null,
+      "Next": "BQ1_PriorityList"
+    },
+    "BQ1_PriorityList": {
+      "Type": "Task",
+      "Comment": "Role 3: final priority sharing list = ranked corridors + Role 4 graph features (_latest view)",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "CREATE TABLE is459_g2t1_aml.bq1_priority_sharing_list\nWITH (format = 'PARQUET', external_location = 's3://is459-g2t1-aml-processed-bucket/bq1_priority_sharing_list/') AS\nSELECT\n  r.from_bank,\n  r.to_bank,\n  r.direct_laundered_usd,\n  r.total_laundering_in_path_usd,\n  r.extra_laundering_value_usd,\n  r.blindspot_gap,\n  fb.betweenness AS from_bank_betweenness,\n  fb.community_id AS from_bank_community,\n  tb.betweenness AS to_bank_betweenness,\n  tb.community_id AS to_bank_community,\n  CASE WHEN fb.community_id IS NULL OR tb.community_id IS NULL THEN NULL\n       WHEN fb.community_id != tb.community_id THEN 1 ELSE 0 END AS cross_community_flag\nFROM is459_g2t1_aml.bq1_corridors_ranked r\nLEFT JOIN is459_g2t1_aml.bq1_graph_bank_features_latest fb ON r.from_bank = CAST(fb.bank_id AS BIGINT)\nLEFT JOIN is459_g2t1_aml.bq1_graph_bank_features_latest tb ON r.to_bank = CAST(tb.bank_id AS BIGINT)",
+        "WorkGroup": "primary",
+        "QueryExecutionContext": {
+          "Database": "is459_g2t1_aml"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+        }
+      },
+      "ResultPath": null,
       "Next": "PipelineComplete"
     },
     "ETLFailed": {
