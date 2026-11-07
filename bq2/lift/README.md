@@ -39,7 +39,8 @@ All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-
 - User confirmed all three S3 development destinations empty before CTAS. Development lift creation succeeded (screenshot 10a): runtime 1.454 sec, scanned 454.24 KB.
 - Sample lift support totals reconcile: 184,449 pairs (134 positive sequences), 33,931 triples (38 positive sequences), as shown in inline chat evidence. Development trade-off CTAS succeeded; screenshot 11a saved (2.369 sec, 5.71 MB scanned).
 - Sample trade-off inspection returned eight rows; accounting reconciliation returned zero defects (inline chat evidence). Development Sankey creation succeeded; screenshot 13a saved (961 ms).
-- Pending: reconcile Sankey totals, remaining integration validation as needed, Tableau charts and full HI/LI publication.
+- All three local Tableau sample CSV exports checked: lift and Sankey path counts/weights agree, and eight trade-off policies reconcile with source denominators and all exported rate formulas. CSVs remain outside Git.
+- Pending: remaining integration validation as needed, sample Tableau workbook/charts and full HI/LI publication.
 
 ## How to run
 
