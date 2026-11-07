@@ -18,6 +18,50 @@ LIMITS = ("MAX_PAIR_CANDIDATES", "MAX_PAIR_LINKS", "MAX_PROJECTED_TRIPLES",
           "MAX_TRIPLES_PER_MIDDLE", "MAX_OUTPUT_ROWS")
 
 
+# Frozen C4b/C5 SDK closure; bootstrap arguments are not runtime evidence.
+SDK_PINS = {
+    "boto3": "1.35.93", "botocore": "1.35.93", "s3transfer": "0.10.4",
+    "aiobotocore": "2.17.0", "s3fs": "2024.6.1", "fsspec": "2024.6.1",
+    "jmespath": "1.0.1", "python-dateutil": "2.9.0.post0", "urllib3": "1.26.20",
+    "six": "1.16.0", "aiohttp": "3.10.1", "aioitertools": "0.11.0",
+    "multidict": "6.0.5", "wrapt": "1.16.0", "aiohappyeyeballs": "2.3.5",
+    "aiosignal": "1.3.1", "attrs": "24.2.0", "frozenlist": "1.4.1",
+    "yarl": "1.9.4", "idna": "2.10",
+}
+CORE_SDK_MODULES = ("boto3", "botocore", "s3transfer", "aiobotocore")
+
+
+def _validate_sdk_installation():
+    """Inspect installed distributions and loaded core origins before clients.
+
+    Exact versions and distribution-owned module paths detect stale/shadowed
+    imports; this is not an independent wheel-hash or bootstrap-policy audit.
+    """
+    import importlib
+    from importlib import metadata
+    from pathlib import Path
+    from sequence_glue_runtime import GlueCompatibilityError
+    failed = []
+    for name, version in SDK_PINS.items():
+        try:
+            distribution = metadata.distribution(name)
+            if distribution.version != version:
+                raise ValueError()
+            if name in CORE_SDK_MODULES:
+                module = importlib.import_module(name)
+                record = name + "/__init__.py"
+                files = distribution.files
+                if (module.__version__ != version or files is None
+                        or sum(str(item) == record for item in files) != 1
+                        or Path(module.__file__).resolve() != Path(distribution.locate_file(record)).resolve()):
+                    raise ValueError()
+        except Exception:
+            failed.append(name)
+    if failed:
+        raise GlueCompatibilityError("unsupported_sdk_installation", failed_requirements=failed)
+    return dict(status="COMPATIBLE", packages=dict(SDK_PINS), core_module_origins_verified=True)
+
+
 class GenerationArgumentError(SystemExit):
     def __init__(self, diagnostic):
         self.diagnostic = diagnostic
@@ -28,11 +72,13 @@ class GenerationArgumentError(SystemExit):
 
 
 class _Parser(_PreflightParser):
-    def fail(self, reason, names=(), unparsed_count=0):
-        safe = [name if re.fullmatch(r"--[A-Za-z][A-Za-z0-9_-]{0,63}", name)
-                and not re.search(r"(?:AKIA|ASIA)[A-Z0-9]{16}", name) else "<redacted-option-name>" for name in names]
+    def fail(self, reason, names=(), unparsed_count=0, token_summary=None):
+        # Only allowlisted option names are safe; an unknown name can itself be a secret.
+        safe = [name for name in names if name in self._option_string_actions]
         diagnostic = dict(status="ARGUMENT_ERROR", reason=reason, arguments=sorted(set(safe)),
             unparsed_count=unparsed_count, generation_completed=False, values_logged=False)
+        if token_summary is not None:
+            diagnostic["unrecognized_token_summary"] = token_summary
         line = "GENERATION_ARGUMENTS | "+json.dumps(diagnostic, sort_keys=True)
         print(line, flush=True)
         print(line, file=sys.stderr, flush=True)
@@ -44,6 +90,39 @@ class _OpaqueRuntimeValue(_SingleValue):
         # Retain duplicate detection, but never retain opaque runtime values.
         super().__call__(parser, namespace, None, option_string)
         delattr(namespace, self.dest)
+
+
+def _summarize_unrecognized(tokens, unknown, option_strings):
+    """Fixed enums/counts only; no values, paths, lengths, hashes or argv indices.
+
+    This parser declares no positionals: every token before the first exact
+    recognized option is an extra. parse_known_args preserves those prefix
+    extras first, so repeated/interned values need no identity/value matching.
+    At most six categories times two positions are emitted in a fixed order.
+    """
+    first_option = next((i for i, token in enumerate(tokens)
+                         if token.split("=", 1)[0] in option_strings), len(tokens))
+    categories = ("empty", "single_dash_token", "boolean_literal", "entry_script_basename_match",
+                  "other_positional", "unknown_long_option")
+    positions = ("before_first_recognized_option", "after_first_recognized_option")
+    counts = {}
+    for index, token in enumerate(unknown):
+        if token == "":
+            category = "empty"
+        elif token.startswith("--"):
+            category = "unknown_long_option"
+        elif token.startswith("-"):
+            category = "single_dash_token"
+        elif token.lower() in ("true", "false"):
+            category = "boolean_literal"
+        elif token.replace("\\", "/").rsplit("/", 1)[-1] == "glue_sample_generation.py":
+            category = "entry_script_basename_match"
+        else:
+            category = "other_positional"
+        position = positions[0 if index < first_option else 1]
+        counts[category, position] = counts.get((category, position), 0) + 1
+    return [dict(category=category, position=position, count=counts[category, position])
+            for category in categories for position in positions if (category, position) in counts]
 
 
 def parse_arguments(argv=None):
@@ -88,7 +167,8 @@ def parse_arguments(argv=None):
     # No --conf, arbitrary dependencies, path overrides or synthetic test options.
     args, unknown = parser.parse_known_args(normalized)
     if unknown:
-        parser.fail("unrecognized_arguments", [v.split("=", 1)[0] for v in unknown if v.startswith("--")], len(unknown))
+        parser.fail("unrecognized_arguments", unparsed_count=len(unknown),
+                    token_summary=_summarize_unrecognized(normalized, unknown, parser._option_string_actions))
     return args
 
 
@@ -97,12 +177,12 @@ def validate_arguments(args):
     if args.ALLOW_AWS_WRITES != "true":
         raise GenerationArgumentError(dict(status="NOT_RUN", reason="write_activation_required",
             generation_completed=False, values_logged=False))
-    if args.additional_python_modules is None or args.python_modules_installer_option is None:
-        raise GenerationArgumentError(dict(status="ARGUMENT_ERROR", reason="sdk_dependency_arguments_required",
-            generation_completed=False, values_logged=False))
+    # Glue may consume bootstrap settings without forwarding them to sys.argv.
+    # Supplied values remain strict; the installed SDK is checked independently.
     sdk_pattern = re.escape(SCRIPT_ROOT)+r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}/role5_sdk\.gluewheels\.zip"
-    if (re.fullmatch(sdk_pattern, args.additional_python_modules) is None
-            or args.python_modules_installer_option != "--no-index"):
+    if ((args.additional_python_modules is not None
+            and re.fullmatch(sdk_pattern, args.additional_python_modules) is None)
+            or args.python_modules_installer_option not in (None, "--no-index")):
         raise ValueError("Only the approved versioned SDK bundle and offline installer option are allowed")
     from sequence_sample_run import create_staging_run
     def positive(name):
@@ -152,6 +232,7 @@ def _check_clients(settings, catalog_client, s3_client, identity_client):
 
 def _initialize_dependencies(settings):
     """Only main's fully validated explicit activation reaches runtime creation."""
+    _validate_sdk_installation()
     import boto3
     from botocore.config import Config
     from awsglue.context import GlueContext

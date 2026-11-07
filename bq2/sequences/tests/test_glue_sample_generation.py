@@ -63,6 +63,8 @@ def completed():
 def fake_modules(deps):
     sdk=MagicMock()
     sdk.Session.return_value.client.side_effect=lambda name,**kwargs:deps[{"s3":"s3_client","glue":"catalog_client","sts":"identity_client"}[name]]
+    sdk.__version__=entry.SDK_PINS["boto3"]
+    sdk.__file__="/approved/boto3/__init__.py"
     context_type=MagicMock(return_value=deps["glue_context"])
     job_type=MagicMock()
     spark_type=MagicMock()
@@ -71,6 +73,11 @@ def fake_modules(deps):
         "botocore.config":types.SimpleNamespace(Config=config_type),
         "awsglue":types.ModuleType("awsglue"),"awsglue.context":types.SimpleNamespace(GlueContext=context_type),
         "awsglue.job":types.SimpleNamespace(Job=job_type),"pyspark.context":types.SimpleNamespace(SparkContext=spark_type)}
+    for name in entry.CORE_SDK_MODULES:
+        if name != "boto3":
+            modules[name]=types.ModuleType(name)
+            modules[name].__version__=entry.SDK_PINS[name]
+            modules[name].__file__="/approved/"+name+"/__init__.py"
     return modules,sdk,context_type,job_type,spark_type,config_type
 
 
@@ -99,7 +106,8 @@ class ArgumentTests(unittest.TestCase):
             initialize.assert_not_called()
 
     def test_every_required_argument_and_duplicate_configuration_are_rejected(self):
-        required=[argv()[i][2:] for i in range(0,len(argv()),2) if argv()[i]!="--ALLOW_AWS_WRITES"]
+        optional={"--ALLOW_AWS_WRITES","--additional-python-modules","--python-modules-installer-option"}
+        required=[argv()[i][2:] for i in range(0,len(argv()),2) if argv()[i] not in optional]
         with patch.object(entry,"_initialize_dependencies") as initialize,patch("sys.stdout",new_callable=io.StringIO),patch("sys.stderr",new_callable=io.StringIO):
             for name in required:
                 with self.subTest(missing=name),self.assertRaises(entry.GenerationArgumentError):entry.main(changed(name,remove=True))
@@ -166,7 +174,7 @@ class ArgumentTests(unittest.TestCase):
     def test_sdk_missing_duplicate_and_malformed_arguments_never_create_dependencies(self):
         sdk="additional-python-modules"
         installer="python-modules-installer-option"
-        cases=[changed(sdk,remove=True),changed(installer,remove=True),argv()[:-4]]
+        cases=[]
         for name in (sdk,installer):
             # Missing value, spaced duplicate and mixed-form duplicate.
             cases.extend([changed(name,remove=True)+["--"+name],
@@ -216,8 +224,165 @@ class ArgumentTests(unittest.TestCase):
                 self.assertNotIn(secret,str(caught.exception))
         self.assertNotIn(secret,out.getvalue()+err.getvalue())
 
+    def test_unknown_categories_and_positions_fail_before_dependencies(self):
+        cases=(("", "empty"), ("-private-short", "single_dash_token"), ("true", "boolean_literal"),
+               ("false", "boolean_literal"), ("TRUE", "boolean_literal"),
+               ("/private/path/glue_sample_generation.py", "entry_script_basename_match"),
+               (r"C:\private\glue_sample_generation.py", "entry_script_basename_match"),
+               ("glue_sample_generation.py", "entry_script_basename_match"),
+               ("private-evidence-text", "other_positional"), ("--private-option=private-value", "unknown_long_option"))
+        base=argv()+["--job-language","python"]
+        with patch.object(entry,"_initialize_dependencies") as initialize, \
+             patch("sys.stdout",new_callable=io.StringIO),patch("sys.stderr",new_callable=io.StringIO):
+            for token,category in cases:
+                for before in (True,False):
+                    args=[token,*base] if before else [*base,token]
+                    with self.subTest(category=category,before=before),self.assertRaises(entry.GenerationArgumentError) as caught:
+                        entry.main(args)
+                    diagnostic=caught.exception.diagnostic
+                    self.assertEqual(caught.exception.code,2)
+                    self.assertEqual(diagnostic["reason"],"unrecognized_arguments")
+                    self.assertEqual(diagnostic["unparsed_count"],1)
+                    self.assertEqual(diagnostic["arguments"],[])
+                    self.assertEqual(diagnostic["unrecognized_token_summary"],[dict(category=category,
+                        position="before_first_recognized_option" if before else "after_first_recognized_option",count=1)])
+                    self.assertFalse(diagnostic["values_logged"])
+                    self.assertFalse(diagnostic["generation_completed"])
+            initialize.assert_not_called()
+
+    def test_repeated_values_keep_correct_positions_and_diagnostics_are_bounded(self):
+        # Identical strings may be both consumed values and extras; .index(value)
+        # would misreport positions. Prefix and later extras must stay distinct.
+        base=argv()+["--enable-metrics","true","--job-language","python"]
+        args=["","true",*base,"","true"]
+        with patch("sys.stdout",new_callable=io.StringIO),patch("sys.stderr",new_callable=io.StringIO):
+            with self.assertRaises(entry.GenerationArgumentError) as caught:entry.parse_arguments(args)
+            summary=caught.exception.diagnostic["unrecognized_token_summary"]
+            self.assertEqual(summary,[dict(category=c,position=p,count=1) for c in ("empty","boolean_literal")
+                for p in ("before_first_recognized_option","after_first_recognized_option")])
+            repeated=["private-positional"]*1000
+            with self.assertRaises(entry.GenerationArgumentError) as caught:entry.parse_arguments([*repeated,*base,*repeated])
+        diagnostic=caught.exception.diagnostic
+        self.assertEqual(diagnostic["unparsed_count"],2000)
+        self.assertEqual(sum(r["count"] for r in diagnostic["unrecognized_token_summary"]),2000)
+        self.assertEqual(len(diagnostic["unrecognized_token_summary"]),2)
+        self.assertLess(len(str(caught.exception)),2048)
+
+    def test_diagnostic_summary_never_exposes_unknown_names_or_private_values(self):
+        secrets=("123456789012", "a"*64, "AKIA1234567890ABCDEF", "/private/customer/location", "private-evidence")
+        tokens=[*secrets,"--private-prefix-"+secrets[0],"--opaque="+secrets[-1],
+                "/private/customer/glue_sample_generation.py"]
+        with patch("sys.stdout",new_callable=io.StringIO) as out,patch("sys.stderr",new_callable=io.StringIO) as err:
+            with self.assertRaises(entry.GenerationArgumentError) as caught:entry.parse_arguments([*tokens,*argv()])
+        rendered=out.getvalue()+err.getvalue()+str(caught.exception)
+        for secret in (*secrets,"--private-prefix","--opaque","glue_sample_generation.py"):
+            self.assertNotIn(secret,rendered)
+        self.assertEqual(out.getvalue(),err.getvalue())
+        diagnostic=caught.exception.diagnostic
+        self.assertEqual(diagnostic["arguments"],[])
+        self.assertEqual(sum(r["count"] for r in diagnostic["unrecognized_token_summary"]),len(tokens))
+
+    def test_metrics_forms_and_installer_forms_preserve_valid_settings(self):
+        for metrics in (["--enable-metrics"],["--enable-metrics","true"],
+                        ["--enable-metrics=true"],["--enable-metrics",""]):
+            for inline_installer in (False,True):
+                args=argv()
+                if inline_installer:
+                    i=args.index("--python-modules-installer-option")
+                    args[i:i+2]=["--python-modules-installer-option=--no-index"]
+                args+=metrics
+                with self.subTest(metrics=metrics,inline_installer=inline_installer):
+                    self.assertEqual(entry.validate_arguments(entry.parse_arguments(args)),settings())
+                    with patch("sys.argv",["glue_sample_generation.py",*args]):
+                        self.assertEqual(entry.validate_arguments(entry.parse_arguments()),settings())
+
+    def test_duplicate_diagnostics_remain_known_names_without_unknown_summary(self):
+        cases=(argv()+["--enable-metrics","true","--enable-metrics=true"],argv()+["--ALLOW_AWS_WRITES=true"])
+        with patch.object(entry,"_initialize_dependencies") as initialize, \
+             patch("sys.stdout",new_callable=io.StringIO),patch("sys.stderr",new_callable=io.StringIO):
+            for args in cases:
+                with self.assertRaises(entry.GenerationArgumentError) as caught:entry.main(args)
+                diagnostic=caught.exception.diagnostic
+                self.assertEqual(diagnostic["reason"],"duplicate_argument")
+                self.assertEqual(diagnostic["unparsed_count"],0)
+                self.assertNotIn("unrecognized_token_summary",diagnostic)
+            initialize.assert_not_called()
+
+
+class SDKInstallationTests(unittest.TestCase):
+    def test_pin_closure_matches_committed_requirements(self):
+        from verify_glue_sdk import pins
+        self.assertEqual(entry.SDK_PINS,pins(ROOT/"requirements_sdk_candidate.txt"))
+        self.assertEqual(len(entry.SDK_PINS),20)
+
+    def test_bootstrap_absent_individual_and_both_have_identical_config(self):
+        for args in (argv(),argv()[:-4],changed("additional-python-modules",remove=True),
+                     changed("python-modules-installer-option",remove=True)):
+            with self.subTest(args=args):
+                self.assertEqual(entry.validate_arguments(entry.parse_arguments(args)),settings())
+
+    def test_approved_installation_and_each_missing_or_mismatched_package(self):
+        from importlib import metadata
+        modules,*_=fake_modules(dependencies())
+        with patch.dict(sys.modules,modules),patch.object(metadata,"distribution",side_effect=approved_distribution):
+            result=entry._validate_sdk_installation()
+            self.assertEqual(result["packages"],entry.SDK_PINS)
+        for name in entry.SDK_PINS:
+            for missing in (False,True):
+                def distribution(package):
+                    if package==name:
+                        if missing:raise metadata.PackageNotFoundError(package)
+                        value=approved_distribution(package);value.version="0.0.0";return value
+                    return approved_distribution(package)
+                with self.subTest(name=name,missing=missing),patch.dict(sys.modules,modules), \
+                     patch.object(metadata,"distribution",side_effect=distribution),self.assertRaises(GlueCompatibilityError) as caught:
+                    entry._validate_sdk_installation()
+                self.assertEqual(caught.exception.diagnostic["failed_requirements"],[name])
+
+    def test_core_shadowing_versions_and_missing_records_fail_closed(self):
+        from importlib import metadata
+        for name in entry.CORE_SDK_MODULES:
+            for mode in ("origin","version","files","import"):
+                modules,*_=fake_modules(dependencies())
+                if mode=="origin":modules[name].__file__="/private/shadow/"+name+"/__init__.py"
+                if mode=="version":modules[name].__version__="0.0.0"
+                if mode=="import":modules[name]=None
+                def distribution(package):
+                    value=approved_distribution(package)
+                    if package==name and mode=="files":value.files=None
+                    return value
+                with self.subTest(name=name,mode=mode),patch.dict(sys.modules,modules), \
+                     patch.object(metadata,"distribution",side_effect=distribution),self.assertRaises(GlueCompatibilityError) as caught:
+                    entry._validate_sdk_installation()
+                self.assertEqual(caught.exception.diagnostic["failed_requirements"],[name])
+                self.assertNotIn("/private",str(caught.exception))
+
+    def test_installation_failure_precedes_clients_and_spark(self):
+        from importlib import metadata
+        deps=dependencies()
+        modules,sdk,context,job,spark,config=fake_modules(deps)
+        with patch.dict(sys.modules,modules),patch.object(metadata,"distribution",side_effect=metadata.PackageNotFoundError), \
+             self.assertRaises(GlueCompatibilityError):
+            entry._initialize_dependencies(settings())
+        sdk.Session.assert_not_called()
+        config.assert_not_called()
+        spark.getOrCreate.assert_not_called()
+        context.assert_not_called()
+        job.assert_not_called()
+
+
+def approved_distribution(name):
+    from pathlib import PurePosixPath
+    return types.SimpleNamespace(version=entry.SDK_PINS[name],files=[PurePosixPath(name+"/__init__.py")],
+        locate_file=lambda record:Path("/approved")/record)
+
 
 class RuntimeTests(unittest.TestCase):
+    def setUp(self):
+        self.metadata_patch=patch("importlib.metadata.distribution",side_effect=approved_distribution)
+        self.metadata_patch.start()
+        self.addCleanup(self.metadata_patch.stop)
+
     def test_checks_precede_coordinator_and_exact_settings_are_forwarded(self):
         deps=dependencies()
         events=[]
@@ -309,6 +474,11 @@ class RuntimeTests(unittest.TestCase):
 
 
 class ScriptTests(unittest.TestCase):
+    def setUp(self):
+        self.metadata_patch=patch("importlib.metadata.distribution",side_effect=approved_distribution)
+        self.metadata_patch.start()
+        self.addCleanup(self.metadata_patch.stop)
+
     def test_actual_main_script_success_and_coordinator_exception(self):
         for failure in (None,RuntimeError("coordinator failed")):
             deps=dependencies()
