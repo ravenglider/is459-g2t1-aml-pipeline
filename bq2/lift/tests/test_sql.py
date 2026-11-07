@@ -159,6 +159,36 @@ class AnalyticsSQLTests(unittest.TestCase):
         self.assertNotIn('any_laundering', sql)
         self.assertEqual(sum(r['support_count'] for r in self.db.execute(sql)), 301)
 
+    def test_generated_development_queries_keep_sample_partition_and_full_denominators(self):
+        import runpy
+        generated = runpy.run_path(str(SQL_DIR / 'prepare_development.py'))['build_queries']()
+        for name, sql in generated.items():
+            self.assertEqual((SQL_DIR / 'development' / name).read_text(), sql)
+            self.assertNotIn("'HI-Medium'", sql)
+            self.assertNotIn("'LI-Medium'", sql)
+        self.fixture()
+        self.add_pattern('sample', 'Excluded -> Sequence', 51, 1, 999, 0, start=8000)
+        self.db.executescript("""
+            ALTER TABLE bq2_sequences ADD COLUMN start_date TEXT DEFAULT '2022-09-01';
+            UPDATE bq2_sequences SET start_date='2022-09-02' WHERE method_sequence='Excluded -> Sequence';
+            ALTER TABLE bq2_sequences RENAME TO bq2_sequences_dev;
+            CREATE TABLE bq2_lift (sentinel INT);
+            INSERT INTO bq2_lift VALUES (42);
+        """)
+        for name in ('03_lift.sql', '04_tradeoff.sql', '05_sankey.sql'):
+            sql = re.sub(r'WITH\s*\(\s*format\s*=.*?\)\s*AS', 'AS', generated[name], count=1, flags=re.S)
+            self.db.executescript(sql.replace('is459_g2t1_aml.', ''))
+        self.assertEqual(self.db.execute('SELECT sentinel FROM bq2_lift').fetchone()[0], 42)
+        row = self.db.execute('SELECT * FROM bq2_lift_dev WHERE min_support=100').fetchone()
+        self.assertEqual(row['dataset'], 'sample')
+        self.assertEqual(row['total_sequences'], 100)
+        row = self.db.execute('SELECT * FROM bq2_tradeoff_dev WHERE min_support=100 AND sequence_length=2 AND top_n=3').fetchone()
+        self.assertEqual(row['reviewed'], 1)
+        self.assertEqual(row['laundering_flagged'], 1)
+        self.assertEqual(row['total_transactions'], 153)  # Includes sample transactions outside start partition.
+        self.assertEqual(row['total_laundering'], 52)
+        self.assertEqual(self.db.execute('SELECT SUM(sequence_count) FROM bq2_sankey_dev').fetchone()[0], 100)
+
     def test_start_now_queries_work_without_sequence_tables(self):
         self.fixture()
         self.db.executescript('''

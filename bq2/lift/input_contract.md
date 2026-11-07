@@ -1,6 +1,6 @@
 # Role 6 input contract — aligned to Role 5 v1
 
-Status: Role 6 implementation is aligned to Ji Ning's documented 21-column interface. Actual catalog types, sample data and publication remain unverified. This is an interface-readiness statement, not a claim that Role 5 has deployed a builder or that a direct message has been sent.
+Status: Role 6 implementation is aligned to Ji Ning's documented 21-column interface. Ji Ning reports successful sample publication and schema/value/lineage acceptance; those AWS results have not been independently retrieved in this session. Start with the [development runbook](development/README.md). This is an interface-readiness statement, not a claim that Role 5 has deployed a builder or that a direct message has been sent.
 
 ## Canonical interface
 
@@ -32,7 +32,7 @@ Use any positive hop for sequence lift, but the final transaction's original lab
 
 ## Sample-first acceptance
 
-1. Ji Ning publishes development table/schema, complete ordered chains, source coverage, rule/builder version and successful-completion manifest. A suggested 100–200 complete chains is an interface-test size, not a support cutoff; the exact batch/window is agreed with Ji Ning.
+1. Ji Ning publishes development table/schema, complete ordered chains, source coverage, rule/builder version and successful-completion manifest. The received handoff is 218,380 chains for sample/start_date=2022-09-01 (184,449 pairs, 33,931 triples); use that approved scope. The earlier 100–200 suggestion is superseded.
 2. Include legitimate/mixed/positive chains, both lengths, repeated methods and overlapping finals where available; report missing cases instead of manufacturing labels. Confirm whether the batch is exhaustive or handpicked.
 3. Use an isolated development copy of SQL/validation: replace only sequence input with `bq2_sequences_dev`, source dataset filters with the actual value (e.g. sample), and ALL output names/references/S3 destinations with consistent `_dev` counterparts. The clean source remains `transactions_clean`, with the same sample dataset. Never relabel sample as HI or create development output in production prefixes. The HI-to-LI robustness query is not meaningful for a sample-only batch; skip it until both full datasets exist.
 4. Run the clean-source uniqueness check, sequence preflight, label/string/array, lineage and link validations. Inspect at least one traced real chain. Handpicked-batch ranks/prevalence are not findings; support cutoffs may yield no eligible patterns and must not be lowered to invent a winner.
@@ -40,8 +40,10 @@ Use any positive hop for sequence lift, but the final transaction's original lab
 
 Still to verify: precise sequence-ID serialization/repeatability, input uniqueness/quality, upstream timestamp interpretation, growth limits, actual development batch, staged publication/recovery and synchronized HI/LI readiness. These are implementation acceptance checks, not new fields or permission to change another role's code.
 
-## Message Xiang Ying can send Ji Ning
+## Current handoff and reply
 
-> I reviewed v1: the 21 columns cover Role 6, and my SQL is now aligned to any_laundering, separate length/support rankings and distinct final_txn_id checks. No extra fields or physical membership table are needed. Please send the development table/schema, source coverage and successful publication manifest when ready; retain ordered bigint IDs and original labels. I'll validate the development batch before full-data analysis. Please fix/test the exact sequence-ID serialization and preserve the documented timestamp interpretation.
+Ji Ning reports successful publication, exact schema match, zero focused value/lineage defects and eight verified Parquet files. Her acceptance query IDs and remaining Role 6 steps are in [development/README.md](development/README.md).
 
-No direct message has been sent. Record Ji Ning's actual development-table mapping and verification outcome here when available.
+> Thanks for the accepted sample handoff. I'll use bq2_sequences_dev with dataset=sample and start_date=2022-09-01 for Role 6 integration checks, keeping outputs in separate development tables. I'll reconcile the reported counts and record my own query IDs. I'll share any issues before we proceed to full HI/LI findings.
+
+This reply is prepared, not sent. Own integration results remain pending.

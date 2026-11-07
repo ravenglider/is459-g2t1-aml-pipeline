@@ -1,12 +1,12 @@
 # BQ2 analytics and targeting (Role 6)
 
-Owner: Xiang Ying. Status: cleaned schema and HI/LI baselines verified from Xiang Ying's console results; screenshots saved. Sequence analytics remain pending Role 5's confirmed inputs.
+Owner: Xiang Ying. Status: cleaned schema and HI/LI baselines verified from Xiang Ying's console results; screenshots saved. Ji Ning reports the sample development partition published and accepted; Role 6 integration checks can begin. Full HI/LI findings remain pending.
 
 ## What it does
 
 Ranks payment-method sequences by laundering lift, compares top-3/5/10 rules with reviewing all transactions, and evaluates frozen HI rules on LI-Medium. Outputs support the ranked table, Sankey, trade-off chart and targeted checklist promised on proposal pages 8–9.
 
-**Start with the [numbered walkthrough](start_now.md) and [five pre-Role-5 queries](start_now.sql).** The [Role 6 guide](role6_guide.md) explains the metric choices. [Input contract](input_contract.md) maps Ji Ning's documented 21-column v1 schema to this implementation; the actual development output is still pending verification.
+**Start now with the [accepted-sample development runbook](development/README.md).** Earlier source checks are in the [baseline walkthrough](start_now.md). The [Role 6 guide](role6_guide.md) explains the metric choices. [Input contract](input_contract.md) maps Ji Ning's documented 21-column v1 schema to this implementation; the actual development output is still pending verification.
 
 ## AWS resources
 
@@ -26,11 +26,13 @@ All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-
 ## Current progress
 
 - Implemented: v1 interface alignment, separate dataset/length lift, 50/100/500 support policies, distinct-final targeting, frozen-rule LI checks and nonduplicated Sankey counts.
-- Eleven local analytical SQL regression tests pass; Athena array/lineage validation and actual integration are not yet executed.
+- Twelve local analytical SQL regression tests pass; Athena array/lineage validation and actual integration are not yet executed.
 - Completed console evidence: schema, one-day HI missing-USD check and full HI/LI baselines, with [five screenshots](screenshots/README.md). Query IDs remain unrecorded. Earlier personal-account CLI failure does not describe team-console access.
 - [Handoff and development mapping](input_contract.md) ready to share; no direct message or deployed builder is claimed.
 - [Four-view Tableau plan](../../viz/bq2_tableau.md) prepared; native workbook and real charts remain pending.
-- Awaiting Role 5: successfully published development batch, source/manifest evidence, then full HI/LI outputs under the same v1 rules.
+- Ji Ning reports the development partition accepted: 218,380 sequences (184,449 pairs; 33,931 triples). Her four acceptance query IDs are recorded in the development runbook; these are teammate evidence, not Role 6 reruns.
+- Ready for Role 6: pinned sample queries and isolated `_dev` destinations, generated from the production SQL with regression checks.
+- Pending: personally verified integration results, measured outputs, Tableau charts and full HI/LI publication.
 
 ## How to run
 
@@ -59,7 +61,7 @@ After fetching current main, the checked-in state machine has live ETL/BQ1 tasks
 
 ## Contribution summary
 
-Implemented v1-aligned sequence lift by length/support policy, distinct-final targeting, frozen-rule LI robustness and Tableau aggregate inputs, with lineage validation and eleven synthetic regression checks. Real-data execution, findings and Tableau workbook remain pending.
+Implemented v1-aligned sequence lift by length/support policy, distinct-final targeting, frozen-rule LI robustness and Tableau aggregate inputs, with lineage validation and twelve synthetic regression checks. Real-data execution, findings and Tableau workbook remain pending.
 
 ## Platform references
 
