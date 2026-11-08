@@ -1,6 +1,6 @@
 # BQ2 sample worksheet evidence
 
-Owner: Xiang Ying (Role 6). Captured 8 November 2026 from the sample Tableau workbook. Seven screenshots show five worksheets: ranking and trade-off each captured at lengths 2 and 3, separate pair and triple Sankeys, and the targeted checklist at length 2/top-3. Original Desktop PNGs were retained and copied without editing. The ranked-table titles now name laundering lift.
+Owner: Xiang Ying (Role 6). Captured 8 November 2026 from the sample Tableau workbook. Nine screenshots show the combined pairs/triples dashboards and five base worksheets: ranking and trade-off each captured at lengths 2 and 3, separate pair and triple Sankeys, and the targeted checklist at length 2/top-3. Original Desktop PNGs were retained and copied without editing. The ranked-table titles now name laundering lift.
 
 | Visual | Screenshot | Description and business relevance |
 |---|---|---|
@@ -11,6 +11,8 @@ Owner: Xiang Ying (Role 6). Captured 8 November 2026 from the sample Tableau wor
 | Sankey — pairs | [18-sample-sankey-pairs.png](18-sample-sankey-pairs.png) | Shows payment-method transitions across 134 laundering-labelled pair occurrences, with Cash → Cheque forming the largest flow. It helps analysts see where labelled activity concentrates across payment methods. |
 | Sankey — triples | [19-sample-sankey-triples.png](19-sample-sankey-triples.png) | Shows payment-method transitions across 38 laundering-labelled triple occurrences. It helps analysts explore longer channel-switching patterns alongside the exact sequence rankings. |
 | Targeted checklist | [20-sample-targeted-checklist.png](20-sample-targeted-checklist.png) | Lists the selected ordered payment-method patterns with rank, support, labelled sequences, rate and lift. The visible length-2/top-3 selection supports a review checklist while clearly marking LI validation as pending. |
+| Combined pairs dashboard | [21-sample-dashboard-pairs.png](21-sample-dashboard-pairs.png) | Combines review-workload trade-offs, labelled payment-method paths, lift rankings and a top-5 sample checklist. The visible disclaimer separates development evidence from final HI/LI findings, and the definitions distinguish sequence weights from distinct final transactions. |
+| Combined triples dashboard | [22-sample-dashboard-triples.png](22-sample-dashboard-triples.png) | Combines triple-path rankings, labelled flows, review-workload trade-offs and the top-3 checklist. All three targeted policies catch 5.71% of sample laundering transactions while review workload increases, showing the limits of broader pattern selection. |
 
 ## Interpretation and scope
 
@@ -22,4 +24,4 @@ Evidence is supported by the checked local CSV exports and [Role 6 run record](.
 
 ## Remaining delivery
 
-The sample targeted checklist is rendered and its visible top-3 pair values match the validated lift export. A screenshot alone does not establish the parameter calculation or all top-N/length combinations; interactive acceptance is still to be recorded. The combined dashboard and inspection/delivery of the current five-sheet native workbook remain pending; local CSVs/extracts are not committed. Final HI/LI outputs, frozen HI-rule evaluation on LI and final recommendations remain separate work. See the [Tableau build guide](../bq2_tableau.md).
+The sample targeted checklist is rendered and its visible top-3 pair values match the validated lift export. Xiang Ying reports testing checklist top-3/5/10 and length switching; the dashboard screenshot additionally shows the expected top-5 pairs. This is user-reported interactive acceptance, not an independent replay. Both combined sample dashboards are captured; inspection/delivery of the current native workbook remains pending; local CSVs/extracts are not committed. Final HI/LI outputs, frozen HI-rule evaluation on LI and final recommendations remain separate work. See the [Tableau build guide](../bq2_tableau.md).
