@@ -79,4 +79,4 @@ Implemented v1-aligned sequence lift by length/support policy, distinct-final ta
 Array validation references: [AWS UNNEST](https://docs.aws.amazon.com/athena/latest/ug/flattening-arrays.html), [array reductions](https://docs.aws.amazon.com/athena/latest/ug/arrays-and-aggregation.html), and [Athena SELECT / ordinality](https://docs.aws.amazon.com/athena/latest/ug/select.html). These references do not replace execution against the development table.
 
 
-Sample Tableau progress (8 November 2026): four worksheets rendered, with six length-specific screenshots and business descriptions in [viz/screenshots](../../viz/screenshots/README.md). Targeted checklist, combined dashboard, native workbook inspection and final HI/LI analysis remain pending.
+Sample Tableau progress (8 November 2026): five worksheets rendered, with seven screenshots and business descriptions in [viz/screenshots](../../viz/screenshots/README.md). The checklist top-3 pairs match the lift export. Remaining control checks, combined dashboard, current native workbook inspection and final HI/LI analysis remain pending.
