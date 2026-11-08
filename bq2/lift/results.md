@@ -110,3 +110,10 @@ Trade-off CSV: eight unique length/policy combinations, sample and min_support 1
 ## Sample targeted checklist — 8 November 2026
 
 [Saved screenshot](../../viz/screenshots/20-sample-targeted-checklist.png) shows length 2 and Patterns to review 3, support 100, and a sample-only / LI-validation-pending status. Rows match the checked lift export: Cheque -> Wire (rank 1, support 300, 1 labelled sequence, 0.33%, lift 4.59); ACH -> ACH (rank 2, support 1,702, 5 labelled, 0.29%, lift 4.04); Cash -> Cheque (rank 3, support 29,245, 84 labelled, 0.29%, lift 3.95). The screenshot establishes rendered values for this selection, not every control combination or the exact saved calculation. No final recommendation or LI robustness is claimed. Next: confirm selector behaviour and assemble the sample dashboard.
+
+
+## Combined sample pairs dashboard — 8 November 2026
+
+[Saved dashboard evidence](../../viz/screenshots/21-sample-dashboard-pairs.png) combines pair trade-offs, pair Sankey, top-ten pair rankings and top-five checklist. Visible values agree with previously checked exports. The dashboard states development-only status and distinguishes minimum-support rankings/checklist, labelled sequence weights and distinct final-transaction trade-offs. Sequence-length control is hidden on this pairs-specific dashboard; Patterns to review remains visible at 5. Xiang Ying reports the preceding checklist top-3/5/10 and length tests passed. Filter mappings, saved workbook settings and tooltip behaviour were not independently replayed from this image.
+
+Screenshot copied byte-for-byte from Desktop, original retained. Some headings/legend labels remain truncated and the checklist has a scrollbar. Current native workbook delivery/inspection and triples dashboard remain pending. No final HI/LI findings or LI robustness is claimed.

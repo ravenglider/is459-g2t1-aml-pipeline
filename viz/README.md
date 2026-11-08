@@ -61,9 +61,9 @@ Built BQ1's live-connected heatmap and top-20 ranked corridor table in Tableau; 
 
 ## Role 6 progress — Xiang Ying
 
-Five sample worksheets have been built in Tableau: ranked sequences, targeted-vs-broad comparison, separate pair/triple Sankeys and the sample targeted checklist. [Seven screenshots and concise business descriptions](screenshots/README.md) record both sequence-length settings and the sample-only interpretation. The sample CSV exports were validated against the development Athena outputs; this sample workbook uses local CSV sources, not a claimed live final-data connection.
+Five sample worksheets have been built in Tableau: ranked sequences, targeted-vs-broad comparison, separate pair/triple Sankeys and the sample targeted checklist. [Eight screenshots and concise business descriptions](screenshots/README.md) record both sequence-length settings and the sample-only interpretation. The sample CSV exports were validated against the development Athena outputs; this sample workbook uses local CSV sources, not a claimed live final-data connection.
 
-Rankings/trade-offs use support 100, with distinct final transactions for targeting. Sankey weights reconcile to 134 positive pair occurrences and 38 positive triple occurrences. The checklist screenshot verifies the visible length-2/top-3 result and sample/LI-pending label; remaining control combinations need interactive confirmation. Combined dashboard and inspected native workbook delivery remain pending. Final HI/LI publication and LI robustness analysis are not established by these screenshots. See [Role 6 results](../bq2/lift/results.md) and the [build guide](bq2_tableau.md).
+Rankings/trade-offs use support 100, with distinct final transactions for targeting. Sankey weights reconcile to 134 positive pair occurrences and 38 positive triple occurrences. The checklist controls were tested by Xiang Ying. The combined sample pairs dashboard is captured with a top-5 checklist, sample disclaimer and metric-unit definitions. Some headings/legend labels remain truncated. Current native workbook inspection/delivery and a triples dashboard remain pending. Final HI/LI publication and LI robustness analysis are not established by these screenshots. See [Role 6 results](../bq2/lift/results.md) and the [build guide](bq2_tableau.md).
 
 ## Role 3 progress — Ryan
 
