@@ -1,9 +1,12 @@
-# LI-Medium generation preparation and staging acceptance
+# LI-Medium preparation reference and staging acceptance
 
 Status: **PREPARATION ONLY — NO AWS RUN APPROVED OR STARTED**.
 Work stays on `role5/full-validation`; the HI owner owns the shared generator.
 Use the same tested implementation for LI. No alternative algorithm, profiler,
 deployment, job change, sample-table change or production publication is made here.
+The owner will continue LI after HI. Start with the consolidated
+[LI_HANDOFF.md](LI_HANDOFF.md); this document retains the detailed preparation
+reference. No further execution by the validation workstream is implied.
 
 ## Current implementation boundary
 
@@ -137,14 +140,13 @@ its exact protocol; no compatible staging-only review helper is claimed yet.
 
 ## Message to the HI owner
 
-> I can take LI preparation and staging validation using your shared bounded
-> generator. I’ve prepared the LI contract, disabled argument worksheet and
-> source/limit/deployment checks on `role5/full-validation`. I won’t implement
-> another algorithm or run AWS yet. Please send the tested bounded release,
-> exact staging-only CLI and receipt/chunk contract when ready. Then we can
-> agree fresh LI fingerprints, measured limits, workers/budget and explicit
-> run approval. I’ll retain LI staging evidence and leave production publication
-> and your HI/sample outputs untouched.
+> The LI continuation handoff is ready on `role5/full-validation` in
+> `bq2/sequences/validation/LI_HANDOFF.md`. It includes configuration, fingerprint
+> collection, argument worksheet, staging steps, validation commands and blockers
+> so you can pick up LI after HI using your tested shared generator. Actual
+> fingerprints, limits and the new staging-start/chunk-validation commands remain
+> pending the verified release and run approval. No AWS jobs or production
+> resources were touched.
 
 **Next dependency:** the shared bounded generator, tested staging-only interface,
 LI measurements/snapshots and explicit execution approval. No reliable LI runtime,

@@ -13,9 +13,12 @@ per-dataset acceptance, date-by-date lineage option and Sonia/Role 6 handoff.
 Copy-ready CLI examples are in [CLOUDSHELL_COMMANDS.md](CLOUDSHELL_COMMANDS.md).
 Use [RESULTS_CHECKLIST.md](RESULTS_CHECKLIST.md) for all 55 owner dates and
 [READER_PAUSE_AND_HANDOFF.md](READER_PAUSE_AND_HANDOFF.md) for the explicit
-confirmation requests and final handoff message. Confirmations remain pending.
+confirmation requests and final handoff message. The actual production pause
+window remains unconfirmed and deferred until the generation owner is ready.
 
-LI ownership preparation is in [LI_WORKSTREAM.md](LI_WORKSTREAM.md), with a
+The generation owner can continue LI after HI using the consolidated
+[LI_HANDOFF.md](LI_HANDOFF.md). Detailed preparation is in
+[LI_WORKSTREAM.md](LI_WORKSTREAM.md), with a
 [disabled argument worksheet](LI_ARGUMENTS.template.json). The newly requested
 bounded generator/staging-only interface is not yet present in the reviewed
 remote `6b50da4` release. No separate algorithm or AWS execution is introduced;

@@ -39,6 +39,7 @@ merged into this validation branch and no probe/job was run here.
 | `READY_TO_RUN.md`, `RUN_EVIDENCE.md`, `SONIA_HANDOFF.md`, `README.md` | Immediate run order, acceptance gates, source/boundary evidence and Sonia/Role 6 handoff |
 | `CLOUDSHELL_COMMANDS.md` | Exact future metadata/query/poll/result-download commands; gated on coordination and not executed here |
 | `RESULTS_CHECKLIST.md`, `READER_PAUSE_AND_HANDOFF.md` | Compact 55-date result tracker, explicit confirmation requests and final message placeholders |
+| `LI_HANDOFF.md`, `LI_WORKSTREAM.md`, `LI_ARGUMENTS.template.json` | Owner continuation after HI: LI configuration, future fingerprint/validation commands, disabled argument worksheet, staging gates and unresolved shared-interface inputs |
 | `.gitignore` | Keep generated SQL and private evidence/approval copies outside Git |
 | `LI_WORKSTREAM.md`, `LI_ARGUMENTS.template.json` | LI ownership preparation: exact source/rules, disabled argument worksheet, deployment gates and staging evidence requirements |
 
@@ -97,11 +98,12 @@ executed in Athena. Local fixtures are synthetic, not production evidence.
 Review the published validation branch with the owner before integration into main.
 Sonia retains ownership of deployment and shared orchestration.
 
-Latest coordination request: the user will send the Sonia/Xiang Ying reader-pause
-messages. Both explicit confirmations, the actual window and paid-query approval
-remain pending. No publication or paid query has been authorised or executed by
-this workstream. The prepared CLI examples would write Athena result objects and
-incur query charges when later run, so their execution needs separate coordination.
+Reader coordination is recorded privately. No actual production pause window
+has been confirmed; conditional willingness or orchestration non-overlap does
+not authorise publication or paid queries. The owner asked to defer arranging
+the window until HI is ready. The prepared CLI examples would write Athena
+result objects and incur query charges when later run, so their execution needs
+separate coordination.
 
 New LI preparation reviewed the owner's remote through `6b50da4`: source
 fingerprint helper plus HI-specific growth probes exist, but the shared bounded
@@ -110,3 +112,13 @@ requires production publication and cannot be used as a staging-only CLI.
 No owner code was merged/modified or executed. LI staging remains blocked on the
 tested shared interface/protocol, LI-specific source/limit evidence and explicit
 budget/run approval. Overlapping staging needs separate isolation/resource review.
+
+The latest request transfers LI execution back to the generation owner after HI.
+`LI_HANDOFF.md` consolidates the pickup instructions and explicitly distinguishes
+staging read-back from post-publication Athena acceptance. Actual fingerprint
+values, measured limits, the bounded staging-start command and chunk-validation
+command remain pending; the argument worksheet records these as unresolved.
+No AWS job-start or production-write command was added or executed.
+The 36 focused tests were rerun successfully after this handoff update. Its two
+Bash blocks passed syntax-only checks; local links, Markdown fences and the
+disabled JSON worksheet were checked. This does not verify live AWS execution.

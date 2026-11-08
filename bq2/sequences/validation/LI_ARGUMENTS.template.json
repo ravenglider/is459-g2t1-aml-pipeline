@@ -3,6 +3,13 @@
   "status": "BLOCKED_PENDING_SHARED_BOUNDED_GENERATOR_AND_EXPLICIT_APPROVAL",
   "dataset": "LI-Medium",
   "region": "us-east-1",
+  "handoff": {
+    "execution_owner": "Role 5 generation owner continuing LI after HI",
+    "handoff_instructions": "LI_HANDOFF.md",
+    "verified_staging_start_command": null,
+    "verified_chunk_validation_command": null,
+    "current_workstream_executes_aws": false
+  },
   "source_contract": {
     "table": "is459_g2t1_aml.transactions_clean",
     "first_owner_date": "2022-09-01",
