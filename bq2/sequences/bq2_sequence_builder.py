@@ -115,22 +115,33 @@ def _build_two_hop_links_validated(transactions, *, first_dates=None, first_txn_
         keys=preceding.select("dataset",F.col("to_bank").alias("from_bank"),
             F.col("to_account").alias("from_account"),F.col("_target_bucket").alias("_bucket"))
         following=following.join(keys,["dataset","from_bank","from_account","_bucket"],"left_semi")
-    a = preceding.alias("a")
-    b = following.alias("b")
+    if _hourly:
+        # The right semi-join contains the left branch's lineage. Avoid relying
+        # on a/b qualifiers there (the live failure could not resolve a.dataset).
+        # Fresh, disjoint names remove attribute reuse at the final join.
+        a=preceding.select(*[F.col(n).alias("_r5_first_"+n) for n in preceding.columns])
+        b=following.select(*[F.col(n).alias("_r5_second_"+n) for n in following.columns])
+        first=lambda n:F.col("_r5_first_"+n)
+        second=lambda n:F.col("_r5_second_"+n)
+    else:
+        a = preceding.alias("a")
+        b = following.alias("b")
+        first=lambda n:F.col("a."+n)
+        second=lambda n:F.col("b."+n)
     condition = (
-        (F.col("a.dataset") == F.col("b.dataset"))
-        & (F.col("a.to_bank") == F.col("b.from_bank"))
-        & (F.col("a.to_account") == F.col("b.from_account"))
-        & (F.col("a.txn_id") != F.col("b.txn_id"))
-        & ((F.col("b._bucket")==F.col("a._target_bucket")) if _hourly else
-           ((F.col("b._bucket") == F.col("a._bucket")) | (F.col("b._bucket") == F.col("a._bucket") + 1)))
-        & (F.col("b.txn_ts") > F.col("a.txn_ts"))
-        & (F.col("b.txn_ts") <= F.col("a.txn_ts") + F.expr("INTERVAL 24 HOURS"))
+        (first("dataset") == second("dataset"))
+        & (first("to_bank") == second("from_bank"))
+        & (first("to_account") == second("from_account"))
+        & (first("txn_id") != second("txn_id"))
+        & ((second("_bucket")==first("_target_bucket")) if _hourly else
+           ((second("_bucket") == first("_bucket")) | (second("_bucket") == first("_bucket") + 1)))
+        & (second("txn_ts") > first("txn_ts"))
+        & (second("txn_ts") <= first("txn_ts") + F.expr("INTERVAL 24 HOURS"))
     )
     return (a.join(b, condition, "inner")
-            .select(F.col("a.dataset").alias("dataset"),
-                    F.col("a.txn_id").alias("first_txn_id"),
-                    F.col("b.txn_id").alias("second_txn_id"))
+            .select(first("dataset").alias("dataset"),
+                    first("txn_id").alias("first_txn_id"),
+                    second("txn_id").alias("second_txn_id"))
             .dropDuplicates(["dataset", "first_txn_id", "second_txn_id"]))
 
 

@@ -201,6 +201,36 @@ class ChunkSparkTests(unittest.TestCase):
             expected=build_two_hop_links(frame).where(F.col("first_txn_id")==1)
             self.assertEqual(self.canonical(actual.collect()),self.canonical(expected.collect()))
 
+    def test_hourly_parquet_cached_self_derived_selectors_have_disjoint_attributes(self):
+        """Glue-shaped plan regression, not a claim to emulate Amazon's analyzer."""
+        from bq2_sequence_builder import _build_two_hop_links_validated
+        from pyspark.sql import functions as F
+        from pyspark import StorageLevel
+        with tempfile.TemporaryDirectory() as folder:
+            self.frame.write.partitionBy("dataset","txn_date").parquet(folder+"/source")
+            session=self.spark.newSession()
+            session.conf.set("spark.sql.session.timeZone","UTC")
+            session.conf.set("spark.sql.sources.partitionColumnTypeInference.enabled","false")
+            source=(session.read.parquet(folder+"/source").select(*CLEANED_SCHEMA.fieldNames())
+                .persist(StorageLevel.DISK_ONLY))
+            try:
+                source.count()
+                nested=source.alias("a").join(source.select("dataset","txn_id").alias("b"),["dataset","txn_id"],"left_semi")
+                first=nested.where(F.col("txn_date")=="2022-09-01").select("dataset","txn_id")
+                ab=_build_two_hop_links_validated(nested,first_txn_ids=first,second_txn_ids=nested.select("dataset","txn_id"),_hourly=True)
+                self.assertEqual(ab.count(),4)
+                reached=nested.join(ab.select("dataset",F.col("second_txn_id").alias("txn_id")),["dataset","txn_id"],"left_semi")
+                bc=_build_two_hop_links_validated(nested,first_txn_ids=reached.select("dataset","txn_id"),
+                    second_txn_ids=nested.select("dataset","txn_id"),_hourly=True)
+                self.assertEqual(bc.count(),4)
+                self.assertEqual(build_three_hop_links(bc,starting_links=ab).count(),8)
+                plan=bc._jdf.queryExecution().analyzed().toString()
+                self.assertIn("_r5_first_dataset",plan);self.assertIn("_r5_second_dataset",plan)
+                # The externally consumed intermediate contract is unchanged.
+                self.assertEqual(bc.columns,["dataset","first_txn_id","second_txn_id"])
+            finally:source.unpersist(blocking=True)
+        self.check_clean()
+
     def test_interrupted_chunks_and_foreign_work_never_finalize(self):
         with tempfile.TemporaryDirectory() as folder:
             stager,client=self.new_stager(folder);stager.begin_date("2022-09-01",2,2)
