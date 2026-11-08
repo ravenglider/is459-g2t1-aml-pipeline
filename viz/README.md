@@ -61,7 +61,9 @@ Built BQ1's live-connected heatmap and top-20 ranked corridor table in Tableau; 
 
 ## Role 6 progress — Xiang Ying
 
-BQ2 SQL inputs and [Tableau build guide with a four-sheet layout specification](bq2_tableau.md#four-sheet-layout-prepared-before-role-5) are prepared. The layout specifies positions, fields, units and filter behaviour with findings left blank; no native workbook is claimed. Proposed sources: `bq2_lift`, `bq2_tradeoff`, `bq2_robustness`, `bq2_sankey` in `is459_g2t1_aml`. They have not been deployed by this work. Role 5's published v1 HI/LI chains are required before real-data visuals. Inputs use any_laundering, distinct final transactions and separate length/support policies; ordered membership is an array, not a physical table. BQ2 workbook/screenshots and measured results remain pending. Update this section after execution and push the completion evidence.
+Four sample worksheets have been built in Tableau: ranked sequences, targeted-vs-broad comparison, and separate pair/triple Sankeys. [Six screenshots and concise business descriptions](screenshots/README.md) record both sequence-length settings and the sample-only interpretation. The sample CSV exports were validated against the development Athena outputs; this sample workbook uses local CSV sources, not a claimed live final-data connection.
+
+Rankings/trade-offs use support 100, with distinct final transactions for targeting. Sankey weights reconcile to 134 positive pair occurrences and 38 positive triple occurrences. The sample targeted checklist, combined dashboard and inspected native workbook delivery remain pending. Final HI/LI publication and LI robustness analysis are not established by these screenshots. See [Role 6 results](../bq2/lift/results.md) and the [build guide](bq2_tableau.md).
 
 ## Role 3 progress — Ryan
 
