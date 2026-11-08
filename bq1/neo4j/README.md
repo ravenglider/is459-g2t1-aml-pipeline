@@ -13,12 +13,13 @@ Builds bank and account graphs from cleaned laundering-labelled transactions for
 | [export_edges.sql](export_edges.sql) | Three primary export/reconciliation SELECTs; same template supports sample/HI/LI |
 | [import.cypher](import.cypher) | Scope-qualified keys, imports and reconciliation; manual population mapping |
 | [queries.cypher](queries.cypher) | Paths, directed betweenness, count-weighted Louvain and feature export |
-| [visualisations.cypher](visualisations.cypher) | Three executed final HI Browser scenes and caption data |
+| [visualisations.cypher](visualisations.cypher) | Verified HI sharing case, intermediary activity and community neighbourhood views |
+| [browser-style.grass](browser-style.grass) | Browser colour/size/width rules; bank/account and relationship captions selected separately in Browser |
 | [robustness.sql](robustness.sql) | Executed HI/LI source/cutoff checks and uncapped HI export |
 | [robustness.cypher](robustness.cypher) | Weighting/cutoff overlaps, saved-scope comparisons and HI restoration |
 | [athena_handoff.sql](athena_handoff.sql) | HI feature registration, completeness and Role 3 join checks |
 | [findings.md](findings.md) | Measured results, limitations, evidence and query references |
-| [run_graph.py](run_graph.py), [test_run_graph.py](test_run_graph.py) | Direct EC2 repeatability and SSM sample success passed; integrated pipeline acceptance pending with Sonia |
+| [run_graph.py](run_graph.py), [test_run_graph.py](test_run_graph.py) | Tested EC2/SSM runner and offline tests; integrated into Sonia's completed shared pipeline |
 | [screenshots/](screenshots/) | Named evidence images only |
 
 Manual sample/HI/LI analyses, Browser scenes and the planned HI weighting/cutoff
@@ -28,8 +29,11 @@ passed output, baseline and repeatability checks, preserving the accepted HI
 graph's stored properties. Task 12 SSM sample success/output acceptance,
 duplicate-ID rejection, an isolated shell-timeout probe and read-only
 feature-validator rejection passed on 7 November 2026. Current Active labels may
-point to the last automated sample run. The initial Sonia handoff was sent.
-Shared Step Functions integration belongs to Sonia and remains unverified.
+point to the latest pipeline graph run. The initial Sonia handoff was sent.
+Sonia completed the whole-pipeline run and automatic priority-table rebuild,
+as confirmed by the team and user. Ryan confirms graph-feature adoption.
+Execution references and independent read-only checks remain evidence follow-ups,
+not unfinished pipeline implementation.
 
 ## AWS resources
 
@@ -54,12 +58,21 @@ Reuse the shared instance, coordinate use and stop idle compute. Protected insta
 | Reads for join | `bq1_corridors_ranked` | `s3://is459-g2t1-aml-processed-bucket/bq1_corridors_ranked/` |
 | Stages inputs | `bank_edges.csv`, `transactions.csv` | Processed bucket `bq1_graph_edges/RUN_ID/` |
 | Accepted HI output | `bq1_graph_bank_features_hi01` | Processed bucket `bq1_graph_results/hi-01/bank_features/bank_features.csv` |
+| Current pipeline interface | `bq1_graph_bank_features_latest` | Sonia's view points to the validated run-specific feature table |
+| Consuming priority table | `bq1_priority_sharing_list` | Processed bucket `bq1_priority_sharing_list/`; rebuilt by the shared pipeline |
 
 Tables are in `is459_g2t1_aml`. Feature schema is exactly `bank_id,betweenness,community_id`; run identity is in the table/prefix. Accepted HI uses `is_laundering=1 AND amount_paid_usd<20000000`; bank edges also require `cross_bank=1`. Account evidence retains same-bank transfers and missing attempt annotations. The cutoff is a team convention, not a regulatory threshold.
 
 Saved populations are `sample-01`, `hi-01`, `li-01` and bank-only `hi-uncapped-01`. Comparisons do not replace the accepted HI feature table. CSV completeness/import totals must be checked for each source snapshot.
 
 ## How to run
+
+The saved-scope queries in `visualisations.cypher` read `hi-01` without changing
+Active labels. The sharing-case source records, individual/combined account
+views, visibility summary and timeline were checked against live results.
+Bank 11's neighbourhood and activity totals, plus a cross-community corridor
+and its displayed memberships, were also verified. See `findings.md` for
+results, evidence and interpretation limits. Earlier evidence remains valid.
 
 These are sectioned source records. Run the intended statements individually; do not execute every Cypher file from top to bottom or rerun accepted analysis merely to inspect results.
 
@@ -73,6 +86,30 @@ These are sectioned source records. Run the intended statements individually; do
 8. Upload features and run `athena_handoff.sql`. Check uniqueness/completeness and unchanged join counts before consumption by Role 3. Keep missing features NULL, not zero risk.
 
 Bank keys are `(scope,bank_id)`; account keys are `(scope,bank_id,account_id)`. New source contents require a fresh scope. GDS projections disappear on restart and must be rebuilt after active-scope changes. Saved properties persist. Betweenness is directed/unweighted; primary Louvain is undirected/count-weighted. Community IDs are arbitrary labels. Account/time continuity supports a candidate, not proof of identical funds or bank intent.
+
+### Browser visualization configuration
+
+Use `:style` in Browser to export a backup and upload browser-style.grass.
+The observed Browser export uses node `size` and relationship `width`; caption
+rules were not retained from the initial stylesheet. Select captions separately
+in Results overview: Account/ActiveAccount -> `bank_id`,TRANSFER ->
+`amount_paid_usd`,Bank/ActiveBank -> `bank_id`,and LAUNDERING_TO ->
+`laundering_txns` when inspecting aggregated corridors. Both account-path
+and bank-corridor captions have been visually checked.
+
+In the account-path view,each circle remains an Account even when its caption
+shows a bank ID. Inspect account_id and transaction timestamps in properties or
+the CASE6 timeline; do not call it an aggregated bank graph. Transfer captions
+are USD amounts,not unique proceeds. Colours distinguish entity/relationship
+types,not risk scores or communities. Arrange the selected path in transfer
+order and keep arrows/amounts separated. These Browser-only settings do not
+change graph records or the shared pipeline.
+
+For COMMUNITY2, place community 3881's displayed banks on the left and community
+3166's on the right, with `114976 -> 297435` between them. COMMUNITY3 lists their
+verified memberships. Layout separates these selected neighbourhoods; the
+stylesheet does not colour nodes by community. Positions may need arranging
+again after rerunning the query.
 
 ## Step Functions info for Sonia
 
@@ -97,8 +134,13 @@ Sonia owns changes to the shared `BQ1_Neo4jLoad` placeholder, state machine and
 orchestration permissions. Role 4 sent her the tested command/interface, output
 table/S3 path, dependencies, runtime and evidence, following
 [the ingestion handoff](../../docs/ingestion-handoff.md#how-your-job-gets-added).
-Role 4 does not edit or deploy the shared Step Functions workflow. End-to-end
-integration remains unverified until Sonia supplies execution evidence.
+Role 4 does not edit or deploy the shared Step Functions workflow. Sonia completed
+the whole pipeline and rebuilt `bq1_priority_sharing_list` with
+the updated SQL. The checked-in graph branch validates the receipt,updates
+`bq1_graph_bank_features_latest`,then the downstream priority CTAS joins this view.
+Collect the actual execution/run references and read-only output checks before
+claiming independently verified end-to-end acceptance. Do not manually run CTAS,
+drop/reset shared tables or refresh Tableau during a pipeline run.
 
 Direct trials, SSM sample output acceptance, duplicate-ID rejection, the isolated
 shell-timeout probe and read-only feature-validator rejection passed. The last
@@ -111,10 +153,10 @@ local; Sonia retains adopted configuration in the team's pipeline source.
 
 Validated direct-run performance instrumentation records stage wall times, Athena execution statistics and result-download times in the success receipt; algorithm timings include their projection/estimate preparation. The final log elapsed time includes success-receipt publication, while the receipt explicitly records elapsed time before its own publication. Direct wall times are measured and recorded in findings.md; EC2 billed uptime, cost and observed peak RAM have not been established.
 
-## Contribution summary (for the Week 13 slide)
+## Contribution summary
 
 Built and manually validated the bank/account graph workflow, source-supported path examples, intermediary/community analyses, three Browser scenes and the HI feature join. Compared HI/LI populations and HI cutoff/weighting sensitivity; documented evidence and limitations.
 
 Accepted HI: **5,159 banks, 29,374 corridors, 34,552 cross-bank transactions, 113 communities**; feature join preserves **1,697,382 rows**. LI: **4,924 banks, 142 communities**. Uncapped HI: **5,166 banks, 111 communities**, with **9/10** top intermediaries shared with filtered HI. Detailed results and weighting caveats are in [findings.md](findings.md).
 
-Remaining: Ryan's final priority-list adoption/source-freshness confirmation, Sonia's integrated execution/failure evidence and EC2 lifecycle agreement, and final team report/slides/videos. Performance stages and GDS estimates are recorded; EC2 billed uptime and cost still need a sourced calculation. The independent Task11 sample feature query ID was not supplied; recover it from history if available without rerunning the completed job. No full-run publication-suppression claim is made from the read-only validator probe. The Browser substitution needs recording in the team submission. Personal guide/notes, helpers, CSVs and coordination drafts remain gitignored.
+Current improvement work: finish the saved-scope investigation views,verify Browser styling and capture readable visualization evidence. Ryan reports graph-feature adoption and Sonia reports a completed pipeline rebuild; execution references and independent refreshed-output checks remain to be recorded. Performance stages and GDS estimates are documented; no full-run publication-suppression claim is made from the read-only validator probe. The independent Task11 sample feature query ID remains an evidence-reference follow-up. Personal guide/notes,helpers,CSVs and coordination drafts remain gitignored.

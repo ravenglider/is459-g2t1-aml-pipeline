@@ -108,6 +108,40 @@ SELECT COUNT_IF(manual_id IS NOT NULL AND auto_id IS NOT NULL) AS matched_banks,
        MAX(ABS(auto_score-manual_score)) AS max_score_delta
 FROM paired;
 
+-- Sharing-case checks: read-only SELECTs; run between shared pipeline executions.
+-- CASE A: verify three account-connected transfers against the cleaned source.
+-- Checked query: d084c4cc-c9af-44dc-84f4-10ec1e74294c.
+-- The executed projection omitted the derived cutoff column; all amounts <20M.
+SELECT txn_id,txn_ts,from_bank,from_account,to_bank,to_account,
+       amount_paid_usd,is_laundering,attempt_id,pattern_type,
+       amount_paid_usd<20000000 AS retained_under_primary_cutoff
+FROM is459_g2t1_aml.transactions_clean
+WHERE dataset='HI-Medium'
+  AND txn_date BETWEEN '2022-09-16' AND '2022-09-17'
+  AND txn_id IN (1923680745310817531,-5560620630767630164,
+                 -2118989140943353923)
+ORDER BY txn_ts;
+
+-- CASE B: current priority context for 260802 -> 151989; checked live.
+-- Query ID not supplied. This is not a new risk score or full snapshot comparison.
+SELECT from_bank,to_bank,direct_laundered_usd,
+       total_laundering_in_path_usd,extra_laundering_value_usd,blindspot_gap,
+       from_bank_betweenness,from_bank_community,
+       to_bank_betweenness,to_bank_community,cross_community_flag
+FROM is459_g2t1_aml.bq1_priority_sharing_list
+WHERE from_bank=260802 AND to_bank=151989;
+
+-- CASE C: optional full-attempt context; not yet checked live in Athena.
+-- Local retained records: 10 transactions, USD96,840,838.84.
+-- The three-transfer sharing example is only a subpath, not unique proceeds.
+SELECT attempt_id,COUNT(*) AS retained_annotated_transactions,
+       ROUND(SUM(amount_paid_usd),2) AS attempt_transaction_value_usd,
+       MIN(txn_ts) AS first_time,MAX(txn_ts) AS last_time
+FROM is459_g2t1_aml.transactions_clean
+WHERE dataset='HI-Medium' AND is_laundering=1
+  AND amount_paid_usd<20000000 AND attempt_id=1885
+GROUP BY attempt_id;
+
 -- Task 11: fresh-ID run01/run02 partition equivalence.
 -- Executed:5159 matched,113 groups each,0 run01 splits,0 run02 merges.
 -- Query ID:189b5da1-06ce-409b-b50b-d463661a759c.

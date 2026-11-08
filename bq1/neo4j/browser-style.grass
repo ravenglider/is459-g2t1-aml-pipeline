@@ -1,0 +1,34 @@
+node.Bank {
+  color: #9CBFCB;
+  size: 34px;
+}
+
+node.ActiveBank {
+  color: #9CBFCB;
+  size: 34px;
+}
+
+node.Account {
+  color: #D7BCDF;
+  size: 34px;
+}
+
+node.ActiveAccount {
+  color: #D7BCDF;
+  size: 34px;
+}
+
+relationship.BANK_LINK {
+  color: #B8C4CF;
+  width: 1px;
+}
+
+relationship.LAUNDERING_TO {
+  color: #B8C4CF;
+  width: 2px;
+}
+
+relationship.TRANSFER {
+  color: #E7BB67;
+  width: 2px;
+}
