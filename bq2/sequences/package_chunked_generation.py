@@ -1,15 +1,15 @@
-"""Separate deterministic 21-module chunked job ZIP; entry script is separate."""
+"""Separate deterministic 22-module chunked job ZIP; entry script is separate."""
 import argparse
 import hashlib
 from pathlib import Path
 import zipfile
 from package_full_generation import FULL_MODULES
 
-MODULES=FULL_MODULES+("glue_hi_growth_probe.py","sequence_chunked_generation.py","sequence_chunked_staging.py")
+MODULES=FULL_MODULES+("glue_hi_growth_probe.py","sequence_chunked_generation.py","sequence_chunked_staging.py","sequence_owner_date.py")
 
 
 def build_package(destination):
-    if len(MODULES)!=len(set(MODULES)) or len(MODULES)!=21:raise ValueError("Expected 21 modules")
+    if len(MODULES)!=len(set(MODULES)) or len(MODULES)!=22:raise ValueError("Expected 22 modules")
     path=Path(destination)
     if path.suffix!=".zip" or path.is_symlink():raise ValueError("Fresh ZIP required")
     for parent in path.absolute().parents:

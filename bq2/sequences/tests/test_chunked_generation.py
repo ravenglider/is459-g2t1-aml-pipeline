@@ -39,6 +39,21 @@ def args(mode="single_chunk"):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_owner_date_cli_requires_bounded_group_counts_and_recovery_evidence(self):
+        valid=args("single_owner_date")+["--OWNER_DATE","2022-09-01","--ROOT_GROUP_START","0","--ROOT_GROUP_COUNT","1",
+            "--INVOCATION_ID","invoke01","--EXPECTED_COUNTS_JSON",json.dumps({"2022-09-01":{"2":4,"3":8}})]
+        entry.validate_arguments(entry.parse_arguments(valid))
+        for key,value in (("ROOT_GROUP_START","-1"),("ROOT_GROUP_COUNT","0"),("INVOCATION_ID","../bad"),
+                          ("EXPECTED_COUNTS_JSON","{}"),("OWNER_DATE","2022-09-29")):
+            bad=list(valid);bad[bad.index("--"+key)+1]=value
+            with patch.object(entry,"_initialize") as initialize,self.assertRaises((ValueError,SystemExit)):
+                entry.main(bad)
+            initialize.assert_not_called()
+        with patch.object(entry,"_initialize") as initialize,self.assertRaises(ValueError):
+            entry.main(valid+["--RESUME_ETAG",'"old"'])
+        initialize.assert_not_called()
+        entry.validate_arguments(entry.parse_arguments(valid+["--RESUME_ETAG",'"old"',"--PREVIOUS_RUN_STOPPED","true"]))
+
     def test_limits_and_cli_fail_before_runtime(self):
         for field in limits().__dict__:
             for value in (0,-1,True):
@@ -67,7 +82,7 @@ class ProtocolTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):package.build_package(a)
             import zipfile
             with zipfile.ZipFile(a) as z:
-                self.assertEqual(len(z.namelist()),21);self.assertIsNone(z.testzip())
+                self.assertEqual(len(z.namelist()),22);self.assertIsNone(z.testzip())
             code="""import importlib,importlib.abc,importlib.util,sys,socket,zipfile
 from unittest.mock import patch
 class Block(importlib.abc.MetaPathFinder):
@@ -85,6 +100,57 @@ with patch.object(socket.socket,'connect',denied):
 """
             r=subprocess.run([sys.executable,"-I","-B","-c",code,str(a),str(Path(entry.__file__).resolve())],cwd=folder,capture_output=True,text=True)
             self.assertEqual(r.returncode,0,r.stderr)
+
+
+class OwnerProtocolTests(unittest.TestCase):
+    def store(self,client=None,day="2022-09-01",invoke="invoke01",etag=None,stopped=False,identity="frozen"):
+        from sequence_owner_date import OwnerDateStager
+        client=client or PublicationS3()
+        store=OwnerDateStager(client,config(),spark=MagicMock(),max_copy_bytes=1000000)
+        manifest=dict(manifest_kind="owner_date_generation_progress",identity=identity,state="CREATED",
+            owner_dates=[day],source=config()["expected_source"],builder={},schema=[],rule_version="v1",published=False)
+        store.open(manifest,invoke,etag,stopped)
+        return store
+
+    def test_independent_dates_have_disjoint_progress_and_no_catalog(self):
+        first=self.store();second=self.store(first.client,day="2022-09-02")
+        first.begin_date("2022-09-01",1,0);second.begin_date("2022-09-02",1,0)
+        first.complete_root("2022-09-01",0,0,{2:0,3:0},[])
+        second.complete_root("2022-09-02",0,0,{2:0,3:0},[])
+        first._assert_owner();second._assert_owner()
+        self.assertNotEqual(first.manifest_uri,second.manifest_uri)
+        self.assertFalse(any(k.startswith("bq2_sequences/") for k in first.client.objects))
+
+    def test_recovery_requires_stopped_fresh_invocation_exact_etag_identity(self):
+        first=self.store()
+        for options in (dict(stopped=False),dict(etag='"stale"',stopped=True),dict(stopped=True,identity="changed"),dict(stopped=True,invoke="invoke01")):
+            kwargs=dict(client=first.client,invoke="invoke02",etag=first.etag,stopped=True);kwargs.update(options)
+            with self.assertRaises(ValueError):self.store(**kwargs)
+        second=self.store(first.client,invoke="invoke02",etag=first.etag,stopped=True)
+        with self.assertRaises(ValueError):first.save(state="PARTIAL_CHUNKS")
+        with self.assertRaises(ValueError):second.save(state="DATE_STAGED_VALIDATED")
+        # Simulate a stored terminal record; recovery must never reopen it.
+        second._write_run(dict(second.manifest,state="DATE_STAGED_VALIDATED"))
+        with self.assertRaises(ValueError):second.save(state="PARTIAL_CHUNKS")
+        with self.assertRaises(ValueError):self.store(second.client,invoke="invoke03",etag=second.etag,stopped=True)
+
+    def test_tampered_completed_root_receipt_rejected(self):
+        first=self.store();first.begin_date("2022-09-01",1,0)
+        first.complete_root("2022-09-01",0,0,{2:0,3:0},[])
+        record=first.completed_roots["0"]
+        first.client.seed(record["receipt_uri"].split("/",3)[3],b'{}')
+        second=self.store(first.client,invoke="invoke02",etag=first.etag,stopped=True)
+        with self.assertRaisesRegex(ValueError,"Root receipt changed"):second.begin_date("2022-09-01",1,0)
+
+    def test_durable_budget_lost_response_reconciliation_and_limit(self):
+        from sequence_owner_date import DurableBudget
+        first=self.store();budget=DurableBudget(limits(max_total_output_rows=2),lambda:None,first)
+        first.client.lose_response=True
+        budget.expansion(2)
+        second=self.store(first.client,invoke="invoke02",etag=first.etag,stopped=True)
+        recovered=DurableBudget(limits(max_total_output_rows=2),lambda:None,second)
+        self.assertEqual(recovered.output_rows,2)
+        with self.assertRaises(Exception):recovered.expansion(1)
 
 
 class MemoryStager:
@@ -138,6 +204,148 @@ class ChunkSparkTests(unittest.TestCase):
         triples=build_three_hop_links(pairs,starting_links=starts)
         return build_sequence_output(frame,starts,triples)
     def check_clean(self):self.assertEqual(self.spark.sparkContext._jsc.sc().getPersistentRDDs().size(),0)
+
+    def owner_stager(self,folder,client=None,invocation="invoke01",resume=None,identity="frozen"):
+        from sequence_owner_date import OwnerDateStager
+        client=client or PublicationS3()
+        stager=OwnerDateStager(client,config(),spark=self.spark,max_copy_bytes=1000000,
+            transport=PublicationTransport(folder,client))
+        manifest=dict(manifest_kind="owner_date_generation_progress",identity=identity,state="CREATED",
+            owner_dates=["2022-09-01"],source=config()["expected_source"],schema=[dict(name=f.name,type=f.dataType.simpleString()) for f in SEQUENCE_SCHEMA],
+            builder=dict(version="test",fingerprint="a"*64),rule_version="v1",published=False)
+        stager.open(manifest,invocation,resume,resume is not None)
+        return stager
+
+    def test_owner_date_group_recovery_all_columns_and_fenced_old_writer(self):
+        from sequence_owner_date import DurableBudget
+        lim=limits(root_chunks=2,max_pair_candidates=20,max_pair_links=20,max_output_rows=20)
+        with tempfile.TemporaryDirectory() as folder:
+            first=self.owner_stager(folder)
+            part=generate_date_chunks(self.frame,"HI-Medium",self.plan,lim,first,
+                budget=DurableBudget(lim,lambda:None,first),root_group=range(1),expected_counts={"2":4,"3":8})
+            self.assertEqual(part["state"],"PARTIAL_CHUNKS")
+            oldetag=first.etag;oldkeys=set(first.client.objects)
+            second=self.owner_stager(folder,first.client,"invoke02",oldetag)
+            with self.assertRaises(ValueError):first.save(state="PARTIAL_CHUNKS")
+            with self.assertRaises(ValueError):self.owner_stager(folder,first.client,"invoke03",oldetag)
+            done=generate_date_chunks(self.frame,"HI-Medium",self.plan,lim,second,
+                budget=DurableBudget(lim,lambda:None,second),root_group=range(2),expected_counts={"2":4,"3":8})
+            self.assertEqual(done["row_count"],12);self.assertEqual(len(second.completed_roots),2)
+            self.assertTrue(oldkeys<=set(first.client.objects))
+            back=second.transport.read(self.spark,done["staging_location"],[r["path"] for r in done["files"]],{"timezone":"UTC"})
+            self.assertEqual(self.canonical(back.collect()),self.canonical(self.unbatched().collect()))
+            self.assertEqual(done["validation_status"],"VALIDATED");self.assertEqual(len(done["schema"]),21)
+        self.check_clean()
+
+    def test_owner_date_interrupted_chunk_isolated_and_budget_preserved(self):
+        from sequence_owner_date import DurableBudget
+        lim=limits(root_chunks=1,max_pair_candidates=20,max_pair_links=20,max_output_rows=20)
+        with tempfile.TemporaryDirectory() as folder:
+            first=self.owner_stager(folder)
+            original=first.write_chunk
+            def interrupted(*a,**k):original(*a,**k);raise TimeoutError("after validated orphan chunk")
+            first.write_chunk=interrupted
+            with self.assertRaises(TimeoutError):generate_date_chunks(self.frame,"HI-Medium",self.plan,lim,first,
+                budget=DurableBudget(lim,lambda:None,first),root_group=range(1),expected_counts={"2":4,"3":8})
+            self.assertEqual(first.completed_roots,{})
+            used=first.manifest["budget"]["output_rows"]
+            second=self.owner_stager(folder,first.client,"invoke02",first.etag)
+            self.assertEqual(second.manifest["budget"]["output_rows"],used)
+            done=generate_date_chunks(self.frame,"HI-Medium",self.plan,lim,second,
+                budget=DurableBudget(lim,lambda:None,second),root_group=range(1),expected_counts={"2":4,"3":8})
+            self.assertEqual(done["row_count"],12)
+            self.assertTrue(any("/invoke01/" in k for k in first.client.objects))
+            self.assertTrue(all("invoke01" not in r["path"] for r in done["files"]))
+        self.check_clean()
+
+    def test_owner_date_count_mismatch_cannot_finalize(self):
+        from sequence_owner_date import DurableBudget
+        lim=limits(root_chunks=1,max_pair_candidates=20,max_pair_links=20,max_output_rows=20)
+        with tempfile.TemporaryDirectory() as folder:
+            stager=self.owner_stager(folder)
+            with self.assertRaisesRegex(ValueError,"Independent expected"):
+                generate_date_chunks(self.frame,"HI-Medium",self.plan,lim,stager,
+                    budget=DurableBudget(lim,lambda:None,stager),root_group=range(1),expected_counts={"2":4,"3":9})
+            self.assertEqual(stager.manifest["state"],"PARTIAL_CHUNKS")
+        self.check_clean()
+
+    def test_owner_date_partial_final_copy_recovers_without_overwriting(self):
+        from sequence_owner_date import DurableBudget
+        lim=limits(root_chunks=1,max_pair_candidates=20,max_pair_links=20,max_output_rows=20)
+        with tempfile.TemporaryDirectory() as folder:
+            first=self.owner_stager(folder);put=first.client.put_object;calls=[]
+            def fail_copy(**kw):
+                if "/batches/" in kw["Key"] and kw["Key"].endswith(".parquet"):
+                    calls.append(kw["Key"])
+                    if len(calls)==2:raise TimeoutError("interrupted final copy")
+                return put(**kw)
+            first.client.put_object=fail_copy
+            with self.assertRaises(TimeoutError):generate_date_chunks(self.frame,"HI-Medium",self.plan,lim,first,
+                budget=DurableBudget(lim,lambda:None,first),root_group=range(1),expected_counts={"2":4,"3":8})
+            self.assertEqual(len(first.completed_roots),1)
+            retained=deepcopy(first.client.objects[calls[0]])
+            first.client.put_object=put
+            second=self.owner_stager(folder,first.client,"invoke02",first.etag)
+            done=generate_date_chunks(self.frame,"HI-Medium",self.plan,lim,second,
+                budget=DurableBudget(lim,lambda:None,second),root_group=range(1),expected_counts={"2":4,"3":8})
+            self.assertEqual(done["row_count"],12);self.assertEqual(first.client.objects[calls[0]],retained)
+            self.assertEqual(second.dates["2022-09-01"]["status"]["revision"],2)
+        self.check_clean()
+
+    def test_owner_date_validating_receipt_failure_recovers_and_empty_date(self):
+        from sequence_owner_date import DurableBudget
+        lim=limits(root_chunks=1,max_pair_candidates=20,max_pair_links=20,max_output_rows=20)
+        with tempfile.TemporaryDirectory() as folder:
+            first=self.owner_stager(folder);put=first.client.put_object
+            def fail_receipt(**kw):
+                if "/batches/" in kw["Key"] and kw["Key"].endswith("metadata/validation.json"):
+                    raise TimeoutError("receipt not committed")
+                return put(**kw)
+            first.client.put_object=fail_receipt
+            with self.assertRaises(TimeoutError):generate_date_chunks(self.frame,"HI-Medium",self.plan,lim,first,
+                budget=DurableBudget(lim,lambda:None,first),root_group=range(1),expected_counts={"2":4,"3":8})
+            self.assertEqual(first.dates["2022-09-01"]["status"]["state"],"VALIDATING")
+            first.client.put_object=put
+            second=self.owner_stager(folder,first.client,"invoke02",first.etag)
+            done=generate_date_chunks(self.frame,"HI-Medium",self.plan,lim,second,
+                budget=DurableBudget(lim,lambda:None,second),root_group=range(1),expected_counts={"2":4,"3":8})
+            self.assertEqual(done["row_count"],12);self.assertEqual(second.dates["2022-09-01"]["status"]["revision"],2)
+        with tempfile.TemporaryDirectory() as folder:
+            empty=self.owner_stager(folder)
+            done=generate_date_chunks(self.frame.limit(0),"HI-Medium",self.plan,lim,empty,
+                budget=DurableBudget(lim,lambda:None,empty),root_group=range(1),expected_counts={"2":0,"3":0})
+            self.assertEqual(done["row_count"],0);self.assertEqual(done["files"],[])
+        self.check_clean()
+
+    def test_owner_date_coordinator_actual_generation_and_final_source_gate(self):
+        import sequence_owner_date as owner
+        from test_full_generation import snapshot
+        context=MagicMock();context.spark_session=self.spark
+        identity=MagicMock();identity.meta.region_name="us-east-1";identity.get_caller_identity.return_value={"Account":"123456789012"}
+        catalog=MagicMock();catalog.meta.region_name="us-east-1"
+        lim=limits(root_chunks=1,max_pair_candidates=20,max_pair_links=20,max_output_rows=20)
+        for changed in (False,True):
+            with tempfile.TemporaryDirectory() as folder:
+                client=PublicationS3();transport=PublicationTransport(folder,client)
+                with patch.object(owner,"inspect_full_source",return_value=snapshot()) as inspect, \
+                     patch.object(owner,"read_full_catalog",return_value=self.frame) as read, \
+                     patch.object(owner,"assert_full_source_unchanged",side_effect=ValueError("source changed") if changed else None):
+                    kwargs=dict(allow_writes=True,mode="single_owner_date",owner_date="2022-09-01",root_group_start=0,
+                        root_group_count=1,invocation_id="invoke01",max_copy_bytes=1000000,expected_counts={"2022-09-01":{"2":4,"3":8}},
+                        glue_context=context,catalog_client=catalog,s3_client=client,identity_client=identity,transport=transport)
+                    if changed:
+                        with self.assertRaisesRegex(ValueError,"source changed"):generation.run_chunked_generation(config(),lim,**kwargs)
+                    else:
+                        result=generation.run_chunked_generation(config(),lim,**kwargs)
+                        self.assertEqual(result["manifest"]["state"],"DATE_STAGED_VALIDATED")
+                        self.assertEqual(result["manifest"]["row_count"],12)
+                        self.assertFalse(result["manifest"]["dataset_wide_verified"])
+                    read.assert_called_once();self.assertEqual(read.call_args.args[2],["2022-09-01","2022-09-02","2022-09-03"])
+                    self.assertEqual(inspect.call_count,2)
+                    states=[json.loads(v["raw"])["state"] for k,v in client.objects.items() if k.endswith("/run.json")]
+                    self.assertEqual(states,["PARTIAL_CHUNKS"] if changed else ["DATE_STAGED_VALIDATED"])
+                    self.assertFalse(any(k.startswith("bq2_sequences/") for k in client.objects))
+            self.check_clean()
 
     def test_all_columns_equivalence_hot_a_hot_middle_boundaries_bigints(self):
         stager=MemoryStager();lim=limits(max_pair_candidates=2,max_pair_links=2,max_middle_expansion=1,max_output_rows=2,max_projected_triples=2)

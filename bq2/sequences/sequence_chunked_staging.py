@@ -96,11 +96,12 @@ class ChunkS3Stager(FullS3Stager):
 
     def finalize_date(self,day,expected_counts):
         date=self._owned_date(day)
-        if date["status"]["state"]!="WRITING":raise ValueError("Date already finalizing/finalized")
+        if date["status"]["state"]!="WRITING" and not (getattr(self,"recoverable",False) and date["status"]["state"]=="VALIDATING"):
+            raise ValueError("Date already finalizing/finalized")
         if set(date["roots"])!=set(range(date["status"]["root_chunks"])):
             raise ValueError("Partial roots cannot finalize a date")
         for root,expected in date["roots"].items():
-            actual,_,_=_get(self.client,date["work"]+"root-"+str(root)+".json")
+            actual,_,_=_get(self.client,date.get("root_uris",{}).get(root,date["work"]+"root-"+str(root)+".json"))
             if actual!=expected:raise ValueError("Root completion evidence changed")
         if sum(r["input_rows"] for r in date["roots"].values())!=date["status"]["owner_rows"]:
             raise ValueError("First-transaction ownership coverage mismatch")
@@ -110,7 +111,13 @@ class ChunkS3Stager(FullS3Stager):
         for chunk in date["chunks"].values():
             allowed.update(r["path"] for r in chunk["files"])
             allowed.update((chunk["receipt_uri"],chunk["receipt_uri"].removesuffix("validation.json")+"status.json"))
-        if {r["path"] for r in inventory_objects(self.client,date["work"])}!=allowed:
+        observed={r["path"] for r in inventory_objects(self.client,date["work"])}
+        if getattr(self,"recoverable",False):
+            # Old invocation work is retained, never included in final output.
+            # Every referenced chunk is independently verified below.
+            if any(not p.startswith(date["work"]+"invocations/") for p in observed):
+                raise ValueError("Unexpected recoverable workspace artifact")
+        elif observed!=allowed:
             raise ValueError("Unexpected/incomplete chunk-work artifacts")
         paths=[]
         for cid,chunk in sorted(date["chunks"].items()):
@@ -131,16 +138,27 @@ class ChunkS3Stager(FullS3Stager):
                 finally:response["Body"].close()
                 if len(raw)!=record["size"]:raise ValueError("Source chunk size changed")
                 uri=date["root"]+"data/dataset="+self.config["dataset"]+"/start_date="+day+"/"+cid+"-"+str(index)+".parquet"
-                self.client.put_object(Bucket=BUCKET,Key=uri.split("/",3)[3],Body=raw,IfNoneMatch="*",
-                    ServerSideEncryption="AES256",ChecksumSHA256=base64.b64encode(hashlib.sha256(raw).digest()).decode())
+                try:
+                    self.client.put_object(Bucket=BUCKET,Key=uri.split("/",3)[3],Body=raw,IfNoneMatch="*",
+                        ServerSideEncryption="AES256",ChecksumSHA256=base64.b64encode(hashlib.sha256(raw).digest()).decode())
+                except Exception as exc:
+                    code=str(getattr(exc,"response",{}).get("Error",{}).get("Code",""))
+                    if not getattr(self,"recoverable",False) or code not in ("412","PreconditionFailed"):
+                        raise
+                    # Existing destination is reusable only after exact SHA-256
+                    # verification below. Never overwrite a conflicting file.
                 check=self.client.get_object(Bucket=BUCKET,Key=uri.split("/",3)[3])
                 try:copied=check["Body"].read()
                 finally:check["Body"].close()
                 if hashlib.sha256(copied).digest()!=hashlib.sha256(raw).digest():raise ValueError("Final date copy checksum mismatch")
                 paths.append(uri)
         self._owned_date(day)
-        status=dict(date["status"],state="VALIDATING",revision=1,expected_counts=counts)
-        date["etag"]=_put(self.client,date["status_uri"],status,date["etag"]);date["status"]=status
+        if date["status"]["state"]=="VALIDATING":
+            status=date["status"]
+            if status.get("expected_counts")!=counts or status.get("revision")!=1:raise ValueError("Conflicting finalization state")
+        else:
+            status=dict(date["status"],state="VALIDATING",revision=1,expected_counts=counts)
+            date["etag"]=_put(self.client,date["status_uri"],status,date["etag"]);date["status"]=status
         records=inventory_objects(self.client,date["root"]+"data/")
         if {r["path"] for r in records}!=set(paths):raise ValueError("Unexpected final date files")
         back=self.transport.read(self.spark,date["root"]+"data/",paths,status)
@@ -151,7 +169,11 @@ class ChunkS3Stager(FullS3Stager):
             parquet_files=len(paths),size_bytes=sum(r["size"] for r in records),**report,validation_status="VALIDATED",
             source=self.manifest["source"],schema=self.manifest["schema"],builder=self.manifest["builder"],rule_version="v1")
         receipt["counts"]=counts
-        uri=date["root"]+"metadata/validation.json";_put(self.client,uri,receipt)
+        uri=date["root"]+"metadata/validation.json"
+        if getattr(self,"recoverable",False) and any(r["path"]==uri for r in inventory_objects(self.client,date["root"]+"metadata/")):
+            existing,_,_=_get(self.client,uri)
+            if existing!=receipt:raise ValueError("Conflicting final receipt")
+        else:_put(self.client,uri,receipt)
         self._owned_date(day)
         status=dict(status,state="VALIDATED",revision=2)
         date["etag"]=_put(self.client,date["status_uri"],status,date["etag"]);date["status"]=status

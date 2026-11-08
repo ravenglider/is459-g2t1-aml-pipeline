@@ -89,7 +89,7 @@ class ChunkBudget:
         self.output_rows+=count;self.chunks+=1
 
 
-def generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_root=None,expected_counts=None):
+def generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_root=None,expected_counts=None,root_group=None):
     owned=[];checkpoints={}
     def persist(frame):
         manager=frame.sparkSession._jsparkSession.sharedState().cacheManager()
@@ -100,7 +100,7 @@ def generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_roo
         source=persist(source)
         degrees=persist(_following_degrees(source))
         return _generate_date_chunks(source,dataset,plan,limits,stager,budget=budget,
-            selected_root=selected_root,expected_counts=expected_counts,following_degrees=degrees,checkpoints=checkpoints)
+            selected_root=selected_root,expected_counts=expected_counts,following_degrees=degrees,checkpoints=checkpoints,root_group=root_group,owned_frames=owned)
     finally:
         import sys
         active=sys.exc_info()[1];error=None
@@ -118,7 +118,7 @@ def generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_roo
             else:raise error
 
 
-def _generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_root,expected_counts,following_degrees,checkpoints):
+def _generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_root,expected_counts,following_degrees,checkpoints,root_group=None,owned_frames=None):
     """Source is one complete validated window; stager owns an immutable date.
 
     Public caller validates source once here. Full-dataset callers additionally
@@ -140,9 +140,15 @@ def _generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_ro
         raise ValueError("Window escapes approved source coverage")
     if selected_root is not None and (type(selected_root) is not int or not 0<=selected_root<limits.root_chunks):
         raise ValueError("Invalid root selector")
+    if root_group is not None:
+        root_group=list(root_group)
+        if (selected_root is not None or not root_group or len(root_group)!=len(set(root_group)) or
+            any(type(r) is not int or not 0<=r<limits.root_chunks for r in root_group)):
+            raise ValueError("Invalid bounded root group")
     day=plan.start_date.isoformat();owners=source.where(F.col("txn_date")==day)
     owner_rows=owners.count();stager.begin_date(day,limits.root_chunks,owner_rows)
-    totals={2:0,3:0};root_receipts=[]
+    completed=getattr(stager,"completed_roots",{})
+    totals={k:sum(r["counts"][str(k)] for r in completed.values()) for k in (2,3)};root_receipts=[]
     def cached(frame):
         # Cache alone preserves nested SQL lineage and can exhaust driver heap
         # during AQE plan rendering. Checkpoint ONLY bounded link/output frames.
@@ -223,9 +229,23 @@ def _generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_ro
             return [emit(empty,triples,{2:0,3:projected},path+"t",root)]
         finally:release_cached(triples)
 
-    for root in (range(limits.root_chunks) if selected_root is None else [selected_root]):
+    roots=(range(limits.root_chunks) if selected_root is None else [selected_root]) if root_group is None else root_group
+    grouped_owners=None
+    if root_group is not None:
+        # Materialize ownership once per bounded group, rather than rehashing
+        # the full date for every root. The complete continuation window stays.
+        grouped_owners=owners.withColumn("_root",F.pmod(F.xxhash64("dataset","txn_id"),F.lit(limits.root_chunks)))
+        grouped_owners=grouped_owners.where(F.col("_root").isin(list(roots))).repartition("_root")
+        grouped_owners=grouped_owners.persist(StorageLevel.DISK_ONLY)
+        # Register the group cache with the outer finally, including failures
+        # before any root completes. Source caches remain caller-owned.
+        owned_frames.append(grouped_owners)
+        grouped_owners.count()
+    for root in roots:
+        if str(root) in completed:continue
         budget.deadline();before=dict(totals);receipts=[]
-        first=owners.where(F.pmod(F.xxhash64("dataset","txn_id"),F.lit(limits.root_chunks))==root)
+        first=(grouped_owners.where(F.col("_root")==root).drop("_root") if grouped_owners is not None else
+            owners.where(F.pmod(F.xxhash64("dataset","txn_id"),F.lit(limits.root_chunks))==root))
         input_rows=first.count()
         for pairs,count,path in links(first,source,"root"+str(root)):
             budget.expansion(count)
@@ -237,6 +257,8 @@ def _generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_ro
                 receipts.extend(triples_for(pairs,continuation,branch,root))
         root_counts={k:totals[k]-before[k] for k in totals}
         root_receipts.append(stager.complete_root(day,root,input_rows,root_counts,[r["chunk_id"] for r in receipts]))
+    if root_group is not None and len(stager.completed_roots)!=limits.root_chunks:
+        return dict(state="PARTIAL_CHUNKS",start_date=day,counts={str(k):v for k,v in totals.items()},published=False)
     if selected_root is None:
         if expected_counts is not None and totals!={int(k):v for k,v in expected_counts.items()}:
             raise ValueError("Independent expected date counts disagree")
@@ -249,12 +271,21 @@ def pairs_empty(source):
 
 
 def run_chunked_generation(config,chunk_limits,*,allow_writes=False,mode,owner_date=None,root_index=None,
-                           max_copy_bytes,expected_counts,glue_context,catalog_client,s3_client,identity_client,transport=None):
+                           max_copy_bytes,expected_counts,glue_context,catalog_client,s3_client,identity_client,transport=None,
+                           root_group_start=None,root_group_count=None,invocation_id=None,resume_etag=None,previous_run_stopped=False):
     """Complete full dataset handoff or explicitly incomplete isolated root check.
 
     Publication is deliberately not invoked. Only full_dataset may call finish;
     single_chunk records PARTIAL_CHUNKS and cannot be consumed by publication.
     """
+    if mode=="single_owner_date":
+        if root_index is not None:raise ValueError("Owner-date mode uses bounded root groups, not a single-root selector")
+        from sequence_owner_date import run_owner_date
+        return run_owner_date(config,chunk_limits,allow_writes=allow_writes,owner_date=owner_date,
+            root_group_start=root_group_start,root_group_count=root_group_count,invocation_id=invocation_id,
+            resume_etag=resume_etag,previous_run_stopped=previous_run_stopped,max_copy_bytes=max_copy_bytes,
+            expected_counts=expected_counts,glue_context=glue_context,catalog_client=catalog_client,
+            s3_client=s3_client,identity_client=identity_client,transport=transport)
     import time
     from copy import deepcopy
     from sequence_full_generation import validate_full_config,profile_full_source
