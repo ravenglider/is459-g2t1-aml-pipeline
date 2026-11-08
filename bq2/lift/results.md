@@ -117,3 +117,10 @@ Trade-off CSV: eight unique length/policy combinations, sample and min_support 1
 [Saved dashboard evidence](../../viz/screenshots/21-sample-dashboard-pairs.png) combines pair trade-offs, pair Sankey, top-ten pair rankings and top-five checklist. Visible values agree with previously checked exports. The dashboard states development-only status and distinguishes minimum-support rankings/checklist, labelled sequence weights and distinct final-transaction trade-offs. Sequence-length control is hidden on this pairs-specific dashboard; Patterns to review remains visible at 5. Xiang Ying reports the preceding checklist top-3/5/10 and length tests passed. Filter mappings, saved workbook settings and tooltip behaviour were not independently replayed from this image.
 
 Screenshot copied byte-for-byte from Desktop, original retained. Some headings/legend labels remain truncated and the checklist has a scrollbar. Current native workbook delivery/inspection and triples dashboard remain pending. No final HI/LI findings or LI robustness is claimed.
+
+
+## Revised sample triples dashboard — 8 November 2026
+
+[Revised Desktop screenshot](../../viz/screenshots/22-sample-dashboard-triples.png) copied byte-for-byte after Xiang Ying selected this replacement. Original retained. Visible triple results match checked exports: all targeted catch rates 5.71%, legitimate review rates 0.11%/0.36%/1.00%, top-ranked Cash -> Cheque -> Wire lift 75.81, and expected top-3 checklist. Three Sankey stages are present without a Null node. The dashboard states development-only status and distinct counting units. Some headings and long paths remain truncated. The image does not independently establish saved filter independence or all interactive behaviour.
+
+At the preceding file check, Downloads/Big Data bq2 analysis.twbx contained only BQ2 Sample - Pairs. The active workbook may be saved elsewhere or contain unsaved changes: save and confirm its location before native-workbook delivery. Final HI/LI findings and LI robustness remain pending.
