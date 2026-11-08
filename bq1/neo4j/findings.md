@@ -2,7 +2,7 @@
 
 Owner: Role 4. Manual run validated on 3 November 2026. BQ1: Which bank pairs are most involved in laundering, and which should prioritise information sharing?
 
-HI graph/import/GDS and the Athena join preview are validated. Final Browser scenes, HI USD-weight sensitivity and primary LI analysis are recorded below. The planned HI cutoff comparison is complete. Task 11 direct sample/HI/repeat trials passed. Task 12 SSM sample success/output acceptance,duplicate-run rejection,isolated shell-timeout and read-only feature-validator probes passed. The initial handoff was sent to Sonia. Role 3 adoption and Sonia-owned end-to-end Step Functions acceptance remain pending; live full-run publication suppression under injected faults was not established by the read-only probe. This is a findings record, not a claim that all Role 4 deliverables are complete.
+HI graph/import/GDS and the Athena join preview are validated. Final Browser scenes, HI USD-weight sensitivity and primary LI analysis are recorded below. The planned HI cutoff comparison is complete. Task 11 direct sample/HI/repeat trials passed. Task 12 SSM sample success/output acceptance,duplicate-run rejection,isolated shell-timeout and read-only feature-validator probes passed. Ryan now reports live priority-list adoption; Sonia reports a completed whole-pipeline run and automatic rebuild with the updated SQL. Independent execution references and rebuilt-output acceptance remain to be recorded. Live full-run publication suppression under injected faults was not established by the read-only probe. Optional investigation upgrades prepared on8 November remain locally checked,not live-executed. This is a findings record, not a claim that all Role 4 deliverables are complete.
 
 ## Population and reconciliation
 
@@ -214,7 +214,7 @@ Conclusion: leading intermediary selection is largely consistent in this top-ten
 
 Athena query ID: `7c2e2f42-8bd3-4f32-b924-ade41416f735`. User reported 29,660 result rows, matching the earlier uncapped directed-corridor baseline. The query selects HI-Medium, laundering label 1 and cross_bank 1, aggregates by directed bank pair and omits the per-transaction $20M cutoff. Intended comparison scope/input folder: `hi-uncapped-01`. CSV staging, import reconciliation and uncapped GDS results were subsequently confirmed as recorded above. Accepted `hi-01` and `li-01` results remain separate.
 
-## Recommendations for Role 3 - proposed use, adoption pending
+## Recommendations for Role 3 - adoption reported; refreshed-output checks pending
 
 Preserve Ryan's Extra Laundering Value / Blindspot Gap order and enrich it with
 the accepted HI endpoint features. Do not invent a combined priority score or
@@ -229,11 +229,20 @@ interpret gap as measured detection performance.
 | 9/10 top intermediaries shared across HI cutoff runs | Report bounded consistency of leading intermediary selection | Not full ranking or priority-list stability |
 | Community membership differs under cutoff and USD weights | Treat communities as explanatory context rather than a rigid risk classification | Arbitrary IDs and unmeasured repeated-run variability |
 
-Ryan must confirm final list consumption and source freshness. The existing
-LEFT JOIN is a validated preview, not a published final Priority Sharing List.
-Personal message drafts remain local; no message has been sent by this audit.
+Update reported by the user on 8 November 2026: Ryan confirmed that his earlier
+Tableau-only update did not refresh Athena tables since the original join check,
+that he can read `bq1_graph_bank_features_hi01`,and that he built a live priority
+table joining both endpoints' betweenness/community fields. He checked populated
+bank11 values. Sonia subsequently reports that a completed whole-pipeline run
+rebuilt `bq1_priority_sharing_list` using the corrected SQL. The repository now
+uses `bq1_graph_bank_features_latest` and preserves NULL when community features
+are missing. These are teammate-reported live results and repository evidence;
+the execution ARN,graph run identity and independent rebuilt-output validation
+have not yet been supplied here. The old source-alignment confirmation predates
+that pipeline rerun; compare current context with the saved hi-01 case before
+presenting them as identical. No manual CTAS/table rebuild should be performed.
 
-Repository cross-check on 5 November 2026: Role 3 commit `37e8554` (4 November,
+Historical repository cross-check on 5 November 2026 (superseded by the update above): Role 3 commit `37e8554` (4 November,
 18:21 Singapore time) added `viz/bq1_corridors_viz.twb`; `4dfd1ad` removed the old
 `Book1.twbx`. The XML contains BQ1 Heatmap and BQ1 Ranked Table sheets and an
 Athena relation to `is459_g2t1_aml.bq1_corridors_ranked`. It does not reference the
@@ -485,7 +494,9 @@ Evidence: [12e SSM timeout](screenshots/12e-ssm-execution-timeout.png).
 This confirms timeout reporting for the isolated shell probe. It did not run
 the graph runner and does not establish database-query cancellation or
 Step Functions timeout/failure handling. The read-only output-validator probe
-is recorded next; shared-workflow integration remains pending.
+is recorded next. Sonia subsequently completed integration and a full pipeline
+run, as confirmed by the team and user; this isolated probe is not an integrated
+failure test.
 
 ### Read-only feature-validator probe (7 November 2026)
 
@@ -504,13 +515,103 @@ This calls the real validator on a read-only/in-memory copy, not the complete
 runner; it does not establish live publication suppression or integrated
 Step Functions failure propagation. No repeated graph trial is needed.
 
+## Verified investigation views
+
+The read-only saved-scope queries use `hi-01`; they do not change graph
+properties, scores, Active labels or shared pipeline outputs.
+
+| View | Verified result | Evidence |
+|---|---|---|
+| Bank 260802 local view | 3 accounts, 2 selected transfers | [Local view](screenshots/sharing-01-bank-260802-local-view.png) |
+| Bank 151989 local view | 3 accounts, 2 selected transfers | [Local view](screenshots/sharing-02-bank-151989-local-view.png) |
+| Combined account path | 4 accounts, 3 selected transfers | [Combined path](screenshots/sharing-03-combined-account-path.png) |
+| Visibility comparison | Individual counts 2/2; combined union 3 | [Comparison](screenshots/sharing-04-visibility-comparison.png) |
+| Transfer timeline | Increasing timestamps; gaps 3h45m and 15h40m | [Timeline](screenshots/sharing-05-transfer-timeline.png) |
+| Bank 11 neighbourhood | 9 banks, 10 directed corridors; up to 5 incoming/outgoing | [Neighbourhood](screenshots/sharing-06-bank11-intermediary-counts.png) |
+| Bank 11 activity | All incoming/outgoing activity, beyond the displayed edges | [Activity](screenshots/sharing-07-bank11-activity-summary.png) |
+| Community neighbourhoods | 9 banks, 9 directed corridors; memberships verified | [Community view](screenshots/sharing-08-cross-community-counts.png) |
+
+Bank 11's activity matches the accepted analysis: betweenness
+921,448.5217782246; incoming 125 corridors / 256 transactions /
+USD16,821,685.22; outgoing 144 corridors / 245 transactions / USD7,238,465.11.
+These directional sums do not establish identical funds or retained balance.
+
+The community example connects bank 114976 (community 3881) to bank 297435
+(community 3166): one labelled transaction worth USD19,729,837.11.
+Displayed members are 110912, 114976, 12, 15011 and 18077 in community 3881;
+297435, 6, 95274 and 97075 in community 3166. These are selected neighbours,
+not complete communities or evidence of criminal organisations. The saved
+layout puts 3881 on the left and 3166 on the right; colours identify bank
+nodes, not community membership. Arrow captions show transaction counts.
+
+The current priority row for 260802 -> 151989 returned direct value
+USD7,758,401.24, shared-attempt context USD96,840,838.84, extra value
+USD89,082,437.60 and gap 0.9198850264729905. Endpoint betweenness values were
+9114.007834089867 and 13611.63291627669; both communities were 727 and the
+cross-community flag was 0. This scoped match does not prove complete source
+snapshot identity. The priority-row query ID has not been supplied.
+
+The three selected transfers matched Athena and each had one saved Neo4j
+relationship with matching bank/account keys, times, amounts and attempt 1885.
+Source query: `d084c4cc-c9af-44dc-84f4-10ec1e74294c`.
+Evidence: [Athena source records](screenshots/demo-02-sharing-case-source.png).
+Account circles are captioned by bank ID; their identity remains account-level.
+Transfer arrows show USD amounts. Source timestamps have no stated timezone.
+
+Selection was retrospective: inspect Ryan's documented
+worked-example pair `260802 -> 151989`, then check its retained annotated
+transactions in the saved `hi-01/transactions.csv`. It is not a blind discovery,
+an independent detection evaluation or a claim about today's priority rank.
+
+The local CSV contains this three-leg account-connected subpath:
+
+| From bank/account | To bank/account | Time (source has no timezone) | Transaction ID | USD |
+|---|---|---|---|---:|
+| 199098 / 825E09140 | 260802 / 816607960 | 2022-09-16 18:36 | 1923680745310817531 | 9,709,463.06 |
+| 260802 / 816607960 | 151989 / 8154771C0 | 2022-09-16 22:21 | -5560620630767630164 | 7,758,401.24 |
+| 151989 / 8154771C0 | 18366 / 822B0D450 | 2022-09-17 14:01 | -2118989140943353923 | 10,240,223.73 |
+
+Local checks establish matching intermediate bank/account keys, distinct IDs,
+increasing times, gaps of 3h45m and 15h40m (both below24h), and annotation1885 /
+RANDOM on all three. The saved feature CSV places both selected banks in
+community727. This is a same-community example; do not label it a community
+bridge. Annotation agreement does not prove identical funds.
+
+Simulation assumption: within these selected benchmark transfers, a bank sees
+records where it is the sender or receiver. The complete labelled benchmark
+is available to the researcher; these view filters are not access controls.
+There is no claim about real banks' complete records or detection uplift.
+
+| Simulated view | Selected transfers visible | Sum of transaction values (USD) |
+|---|---:|---:|
+| Bank260802 alone | 2 | 17,467,864.30 |
+| Bank151989 alone | 2 | 17,998,624.97 |
+| Combined pair | 3 | 27,708,088.03 |
+
+The common direct transfer appears once in the combined view. Sharing exposes
+one additional selected leg compared with either individual view; it does not
+recover the full annotated attempt. The local retained annotation1885 contains
+10 transactions totalling96,840,838.84 in transaction value. That benchmark is
+different from the bounded three-leg view. Neither total is unique proceeds;
+do not describe Ryan's gap as the percentage this pair would newly detect.
+
+Recommended follow-up: jointly examine the connected
+accounts and preceding/following transfer records to establish wider context.
+Centrality/community fields support discussion, not a new risk score.
+Sources: visualisations.cypher CASE0-6; athena_handoff.sql optional CASEA-C.
+Browser styling source: browser-style.grass,with separate UI caption settings
+recorded in README.md. Both individual views, the combined view, timeline and
+visibility summary have been checked against user-supplied live results.
+Existing evidence is preserved. Sonia owns the shared pipeline; it is unchanged.
+
 ## Remaining validation and submission work
 
 The manual graph analysis and the planned component acceptance checks are
 complete within their documented scopes. There is no identified missing
 implementation file from the original Role 4 graph breakdown. This is not a
 claim that every team/submission deliverable is finished. The remaining work
-includes Sonia's integration and Ryan's adoption, as well as final cost/report/
+includes independent acceptance of Sonia's reported integration and Ryan's
+reported adoption, as well as final cost/report/
 slides/video contributions. The independent Task 11 sample feature-query ID is
 still a minor evidence-reference follow-up; it must not be invented.
 
@@ -526,8 +627,10 @@ still a minor evidence-reference follow-up; it must not be invented.
   by the read-only probe; Sonia owns shared-workflow acceptance.
 - User confirmed the tested graph interface was personally sent to Sonia on
   7 November 2026; provide her the subsequent validator-probe result if needed.
-- Sonia's integrated execution, accepted-run consumption and EC2 lifecycle agreement.
-- Ryan's final priority-list adoption and final team report/slides/video artefacts.
+- Record Sonia's reported integrated run references,check accepted-run consumption
+  and confirm EC2 lifecycle behaviour/ownership; do not rerun CTAS manually.
+- Ryan reports adoption; independently validate the refreshed priority-table
+  join/coverage. Final team report/slides/video artefacts remain separate work.
 
 Offline tests and static file checks are not live AWS/Cypher validation. Evidence
 screenshots are selected result views, not complete source snapshots. Query IDs
