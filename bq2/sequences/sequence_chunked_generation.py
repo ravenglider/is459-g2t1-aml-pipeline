@@ -89,7 +89,9 @@ class ChunkBudget:
         self.output_rows+=count;self.chunks+=1
 
 
-def generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_root=None,expected_counts=None,root_group=None):
+def generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_root=None,expected_counts=None,root_group=None,_owner_ids=None):
+    if _owner_ids is not None and (selected_root!=0 or limits.root_chunks!=1 or not getattr(stager,"_batched_kernel",False)):
+        raise ValueError("Private batched ownership selector requires isolated adapter")
     owned=[];checkpoints={}
     def persist(frame):
         manager=frame.sparkSession._jsparkSession.sharedState().cacheManager()
@@ -100,7 +102,7 @@ def generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_roo
         source=persist(source)
         degrees=persist(_following_degrees(source))
         return _generate_date_chunks(source,dataset,plan,limits,stager,budget=budget,
-            selected_root=selected_root,expected_counts=expected_counts,following_degrees=degrees,checkpoints=checkpoints,root_group=root_group,owned_frames=owned)
+            selected_root=selected_root,expected_counts=expected_counts,following_degrees=degrees,checkpoints=checkpoints,root_group=root_group,owned_frames=owned,owner_ids=_owner_ids)
     finally:
         import sys
         active=sys.exc_info()[1];error=None
@@ -118,7 +120,7 @@ def generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_roo
             else:raise error
 
 
-def _generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_root,expected_counts,following_degrees,checkpoints,root_group=None,owned_frames=None):
+def _generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_root,expected_counts,following_degrees,checkpoints,root_group=None,owned_frames=None,owner_ids=None):
     """Source is one complete validated window; stager owns an immutable date.
 
     Public caller validates source once here. Full-dataset callers additionally
@@ -146,6 +148,7 @@ def _generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_ro
             any(type(r) is not int or not 0<=r<limits.root_chunks for r in root_group)):
             raise ValueError("Invalid bounded root group")
     day=plan.start_date.isoformat();owners=source.where(F.col("txn_date")==day)
+    if owner_ids is not None:owners=owners.join(owner_ids.select("dataset","txn_id"),["dataset","txn_id"],"left_semi")
     owner_rows=owners.count();stager.begin_date(day,limits.root_chunks,owner_rows)
     completed=getattr(stager,"completed_roots",{})
     totals={k:sum(r["counts"][str(k)] for r in completed.values()) for k in (2,3)};root_receipts=[]
@@ -184,7 +187,9 @@ def _generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_ro
             for i,part in enumerate(split):yield from links(first,part,path+"b"+str(i))
             return
         result=cached(_build_two_hop_links_validated(source,first_txn_ids=first.select("dataset","txn_id"),
-            second_txn_ids=following.select("dataset","txn_id"),_hourly=True))
+            # Selecting every source ID adds a redundant full-window self-semi
+            # join. Keep the selector ONLY when adaptive splitting narrowed B/C.
+            second_txn_ids=None if following is source else following.select("dataset","txn_id"),_hourly=True))
         try:
             count=result.count()
             _enforce_limit("pair_links",count,limits.max_pair_links)
@@ -200,13 +205,29 @@ def _generate_date_chunks(source,dataset,plan,limits,stager,*,budget,selected_ro
             for column in ("first_txn_id","second_txn_id","third_txn_id"):
                 ids=ids.unionByName(triples.select("dataset",F.col(column).alias("txn_id")))
         members=source.join(ids,["dataset","txn_id"],"left_semi")
-        output=cached(build_sequence_output(members,pairs,triples))
+        member_cache_owned=False
+        if getattr(stager,"_batched_kernel",False):
+            manager=source.sparkSession._jsparkSession.sharedState().cacheManager()
+            if not manager.lookupCachedData(members._jdf).nonEmpty():
+                # Reuse the bounded lookup across source validation and all
+                # enrichment joins instead of rescanning the full window.
+                members.persist(StorageLevel.DISK_ONLY);owned_frames.append(members);member_cache_owned=True
         try:
-            chunk_id="c"+hashlib.sha256(path.encode()).hexdigest()[:60]
-            receipt=stager.write_chunk(day,root,chunk_id,output,counts,ownership=path)
-            for length in totals:totals[length]+=counts[length]
-            return receipt
-        finally:release_cached(output)
+            output=cached(build_sequence_output(members,pairs,triples))
+            try:
+                chunk_id="c"+hashlib.sha256(path.encode()).hexdigest()[:60]
+                receipt=stager.write_chunk(day,root,chunk_id,output,counts,ownership=path)
+                for length in totals:totals[length]+=counts[length]
+                return receipt
+            finally:release_cached(output)
+        finally:
+            if member_cache_owned:
+                import sys
+                active=sys.exc_info()[1]
+                try:members.unpersist(blocking=True);owned_frames.remove(members)
+                except Exception as cleanup:
+                    if active is None:raise
+                    active.add_note("Owned member cache cleanup failed: "+type(cleanup).__name__)
 
     def triples_for(starting,continuations,path,root):
         budget.node()
@@ -272,20 +293,21 @@ def pairs_empty(source):
 
 def run_chunked_generation(config,chunk_limits,*,allow_writes=False,mode,owner_date=None,root_index=None,
                            max_copy_bytes,expected_counts,glue_context,catalog_client,s3_client,identity_client,transport=None,
-                           root_group_start=None,root_group_count=None,invocation_id=None,resume_etag=None,previous_run_stopped=False):
+                           root_group_start=None,root_group_count=None,invocation_id=None,resume_etag=None,previous_run_stopped=False,group_limits=None):
     """Complete full dataset handoff or explicitly incomplete isolated root check.
 
     Publication is deliberately not invoked. Only full_dataset may call finish;
     single_chunk records PARTIAL_CHUNKS and cannot be consumed by publication.
     """
-    if mode=="single_owner_date":
+    if mode in ("single_owner_date","batched_owner_date"):
+        if (mode=="batched_owner_date")!=(group_limits is not None):raise ValueError("Batched mode requires explicit group budgets")
         if root_index is not None:raise ValueError("Owner-date mode uses bounded root groups, not a single-root selector")
         from sequence_owner_date import run_owner_date
         return run_owner_date(config,chunk_limits,allow_writes=allow_writes,owner_date=owner_date,
             root_group_start=root_group_start,root_group_count=root_group_count,invocation_id=invocation_id,
             resume_etag=resume_etag,previous_run_stopped=previous_run_stopped,max_copy_bytes=max_copy_bytes,
             expected_counts=expected_counts,glue_context=glue_context,catalog_client=catalog_client,
-            s3_client=s3_client,identity_client=identity_client,transport=transport)
+            s3_client=s3_client,identity_client=identity_client,transport=transport,group_limits=group_limits)
     import time
     from copy import deepcopy
     from sequence_full_generation import validate_full_config,profile_full_source

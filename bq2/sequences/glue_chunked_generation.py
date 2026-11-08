@@ -33,7 +33,7 @@ def parse_arguments(argv=None):
         p.add_argument("--"+n,required=True,action=_SingleValue)
     p.add_argument("--ALLOW_AWS_WRITES",choices=("true","false"),default="false",action=_SingleValue)
     p.add_argument("--JOB_NAME",choices=(JOB_NAME,),default=JOB_NAME,action=_SingleValue)
-    for n in ("OWNER_DATE","ROOT_INDEX","ROOT_GROUP_START","ROOT_GROUP_COUNT","INVOCATION_ID","RESUME_ETAG",
+    for n in ("OWNER_DATE","ROOT_INDEX","ROOT_GROUP_START","ROOT_GROUP_COUNT","INVOCATION_ID","RESUME_ETAG","GROUP_LIMITS_JSON",
         "EXPECTED_COUNTS_JSON","JOB_ID","JOB_RUN_ID","SECURITY_CONFIGURATION",
         "TempDir","extra-py-files","scriptLocation","additional-python-modules","job-language","job-bookmark-option",
         "continuous-log-logGroup","continuous-log-logStreamPrefix","custom-logGroup-prefix","custom-logStream-prefix"):
@@ -63,14 +63,19 @@ def validate_arguments(args):
     if args.DATASET!=config["dataset"]:raise ValueError("Dataset disagreement")
     limits=ChunkLimits(**_json(args.CHUNK_LIMITS_JSON))
     validate_chunk_limits(config,limits)
-    if args.MODE not in ("single_chunk","full_dataset","single_owner_date"):raise ValueError("Explicit mode required")
+    if args.MODE not in ("single_chunk","full_dataset","single_owner_date","batched_owner_date"):raise ValueError("Explicit mode required")
+    if args.MODE=="batched_owner_date":
+        groups=_json(args.GROUP_LIMITS_JSON) if args.GROUP_LIMITS_JSON is not None else None
+        if (not isinstance(groups,dict) or set(groups)!={"max_group_input_rows","max_group_pair_work","max_group_output_rows"}
+            or any(type(v) is not int or v<=0 for v in groups.values())):raise ValueError("Explicit positive group budgets required")
+    elif args.GROUP_LIMITS_JSON is not None:raise ValueError("Group budgets require batched mode")
     root=None
     if args.MODE=="single_chunk":
         if args.OWNER_DATE not in owner_dates(config["dataset"]) or args.ROOT_INDEX is None or not re.fullmatch(r"0|[1-9][0-9]*",args.ROOT_INDEX):
             raise ValueError("Valid owned date/root required")
         root=int(args.ROOT_INDEX)
         if root>=limits.root_chunks:raise ValueError("Root outside partition plan")
-    elif args.MODE=="single_owner_date":
+    elif args.MODE in ("single_owner_date","batched_owner_date"):
         from sequence_manifest import _token
         if args.OWNER_DATE not in owner_dates(config["dataset"]) or args.ROOT_INDEX is not None:
             raise ValueError("Explicit HI owner date required")
@@ -82,7 +87,7 @@ def validate_arguments(args):
         if args.RESUME_ETAG is not None and (not args.RESUME_ETAG.strip() or args.PREVIOUS_RUN_STOPPED!="true"):
             raise ValueError("Confirmed stopped predecessor and exact ETag required")
     elif args.ROOT_INDEX is not None or args.OWNER_DATE is not None:raise ValueError("Full dataset cannot restrict dates/roots")
-    if args.MODE!="single_owner_date" and (any(getattr(args,k) is not None for k in
+    if args.MODE not in ("single_owner_date","batched_owner_date") and (any(getattr(args,k) is not None for k in
         ("ROOT_GROUP_START","ROOT_GROUP_COUNT","INVOCATION_ID","RESUME_ETAG")) or args.PREVIOUS_RUN_STOPPED!="false"):
         raise ValueError("Recovery arguments require single_owner_date")
     if not re.fullmatch(r"[1-9][0-9]{0,17}",args.MAX_COPY_BYTES):raise ValueError("Positive copy-byte bound required")
@@ -90,7 +95,7 @@ def validate_arguments(args):
     if not isinstance(expected,dict) or not set(expected)<=set(owner_dates(config["dataset"])):raise ValueError("Invalid expected count dates")
     for counts in expected.values():
         if not isinstance(counts,dict) or set(counts)!={"2","3"} or any(type(v) is not int or v<0 for v in counts.values()):raise ValueError("Invalid independent counts")
-    if args.MODE=="single_owner_date" and set(expected)!={args.OWNER_DATE}:raise ValueError("Exact independent date counts required")
+    if args.MODE in ("single_owner_date","batched_owner_date") and set(expected)!={args.OWNER_DATE}:raise ValueError("Exact independent date counts required")
     for n,file in (("extra_py_files","role5_chunked_modules.zip"),("scriptLocation","glue_chunked_generation.py"),("additional_python_modules","role5_sdk.gluewheels.zip")):
         value=getattr(args,n)
         if value is not None and not re.fullmatch(re.escape(SCRIPT_ROOT)+r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}/"+re.escape(file),value):raise ValueError("Unapproved artifact URI")
@@ -102,9 +107,10 @@ def validate_arguments(args):
 def main(argv=None):
     args=parse_arguments(argv);config,limits,root,expected=validate_arguments(args)
     dependencies=_initialize(SimpleNamespace(EXPECTED_ACCOUNT_ID=config["account_id"]))
-    recovery={} if args.MODE!="single_owner_date" else dict(root_group_start=int(args.ROOT_GROUP_START),
+    recovery={} if args.MODE not in ("single_owner_date","batched_owner_date") else dict(root_group_start=int(args.ROOT_GROUP_START),
         root_group_count=int(args.ROOT_GROUP_COUNT),invocation_id=args.INVOCATION_ID,resume_etag=args.RESUME_ETAG,
         previous_run_stopped=args.PREVIOUS_RUN_STOPPED=="true")
+    if args.MODE=="batched_owner_date":recovery["group_limits"]=_json(args.GROUP_LIMITS_JSON)
     result=run_chunked_generation(config,limits,allow_writes=True,mode=args.MODE,owner_date=args.OWNER_DATE,root_index=root,
         max_copy_bytes=int(args.MAX_COPY_BYTES),expected_counts=expected,**recovery,**dependencies)
     print("CHUNKED_GENERATION | "+json.dumps(dict(state=result["manifest"]["state"],manifest_uri=result["manifest_uri"],

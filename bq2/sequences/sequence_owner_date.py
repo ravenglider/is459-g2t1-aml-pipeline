@@ -5,6 +5,7 @@ stopped predecessor. CAS fences metadata, not already executing Spark/S3 tasks;
 each invocation therefore writes chunks into a separate immutable workspace.
 """
 from copy import deepcopy
+import hashlib
 import time
 from pyspark import StorageLevel
 from pyspark.sql import functions as F
@@ -182,9 +183,12 @@ class DurableBudget(ChunkBudget):
 
 
 def run_owner_date(config,limits,*,allow_writes,owner_date,root_group_start,root_group_count,invocation_id,
-    resume_etag,previous_run_stopped,max_copy_bytes,expected_counts,glue_context,catalog_client,s3_client,identity_client,transport=None):
+    resume_etag,previous_run_stopped,max_copy_bytes,expected_counts,glue_context,catalog_client,s3_client,identity_client,transport=None,
+    group_limits=None):
     if allow_writes is not True:raise ValueError("Explicit staging activation required")
     config=validate_full_config(config);validate_chunk_limits(config,limits);_token(invocation_id)
+    if group_limits is not None and (not isinstance(group_limits,dict) or set(group_limits)!={"max_group_input_rows","max_group_pair_work","max_group_output_rows"}
+        or any(type(v) is not int or v<=0 for v in group_limits.values())):raise ValueError("Explicit positive batched group budgets required")
     if owner_date not in owner_dates(config["dataset"]):raise ValueError("Approved owner date required")
     if any(type(v) is not int or v<0 for v in (root_group_start,root_group_count)) or root_group_count==0 or root_group_start+root_group_count>limits.root_chunks:
         raise ValueError("Explicit bounded root group required")
@@ -212,13 +216,19 @@ def run_owner_date(config,limits,*,allow_writes,owner_date,root_group_start,root
     if not plan.ready_to_process:raise ValueError("Incomplete date plan")
     dates=[d.isoformat() for d in plan.available_input_dates]
     identity=_digest(dict(config=config,limits=limits.__dict__,owner_date=owner_date,expected_counts=expected_counts))
+    if group_limits is not None:identity=_digest(dict(identity=identity,group_limits=group_limits,mode="batched_owner_date"))
     manifest=dict(format_version=1,manifest_kind="owner_date_generation_progress",identity=identity,state="CREATED",
         dataset=config["dataset"],owner_dates=[owner_date],source_dates=dates,source=config["expected_source"],
         run_id=config["run_id"],attempt_id=config["attempt_id"],owner_token=config["owner_token"],published=False,catalog_updated=False,
         builder=dict(version=config["builder_version"],fingerprint=config["builder_fingerprint"]),rule_version="v1",
         schema=[dict(name=f.name,type=f.dataType.simpleString()) for f in SEQUENCE_SCHEMA],batches=[],
         verification_scope="provided_dataframe_only",dataset_wide_verified=False)
-    stager=OwnerDateStager(s3_client,config,spark=spark,max_copy_bytes=max_copy_bytes,transport=transport,deadline=deadline)
+    stager_type=OwnerDateStager
+    if group_limits is not None:
+        from sequence_batched_staging import BatchedDateStager
+        stager_type=BatchedDateStager
+        manifest["manifest_kind"]="batched_owner_date_generation_progress"
+    stager=stager_type(s3_client,config,spark=spark,max_copy_bytes=max_copy_bytes,transport=transport,deadline=deadline)
     stager.open(manifest,invocation_id,resume_etag,previous_run_stopped)
     stager.save(active_root_group=dict(start=root_group_start,count=root_group_count),
         predecessor_stopped_acknowledged=previous_run_stopped)
@@ -233,8 +243,21 @@ def run_owner_date(config,limits,*,allow_writes,owner_date,root_group_start,root
             source.persist(StorageLevel.DISK_ONLY);owned=True
         validate_transactions(source)
         budget=DurableBudget(limits,deadline,stager)
-        result=generate_date_chunks(source,config["dataset"],plan,limits,stager,budget=budget,
-            root_group=range(root_group_start,root_group_start+root_group_count),expected_counts=expected_counts[owner_date])
+        if group_limits is None:
+            result=generate_date_chunks(source,config["dataset"],plan,limits,stager,budget=budget,
+                root_group=range(root_group_start,root_group_start+root_group_count),expected_counts=expected_counts[owner_date])
+        else:
+            from sequence_batched_kernel import generate_root_group
+            stager.begin_date(owner_date,limits.root_chunks,source.where(F.col("txn_date")==owner_date).count())
+            roots=[r for r in range(root_group_start,root_group_start+root_group_count) if str(r) not in stager.completed_roots]
+            if roots:
+                def consume(output,counts,root_counts,ownership):
+                    # Shared chunk stored ONCE. Actual per-root ownership/counts
+                    # are reconciled by the kernel and the atomic group receipt.
+                    cid="c"+hashlib.sha256(ownership.encode()).hexdigest()[:60]
+                    stager.write_chunk(owner_date,min(roots),cid,output,counts,ownership=ownership)
+                result=generate_root_group(source,config["dataset"],plan,limits,roots,budget=budget,consume=consume,**group_limits)
+            else:result=dict(state="ALREADY_COMMITTED")
     except Exception as exc:error=exc
     finally:
         if owned:
@@ -250,6 +273,15 @@ def run_owner_date(config,limits,*,allow_writes,owner_date,root_group_start,root
         try:stager.save(state="PARTIAL_CHUNKS",last_error=type(error).__name__)
         except Exception as exc:error.add_note("Progress recording failed: "+type(exc).__name__)
         raise error.with_traceback(error.__traceback__)
+    if group_limits is not None:
+        # Both kernel caches and source cache have been cleaned, and the final
+        # source inspection succeeded. Only now may the group become recoverable.
+        if result.get("state")=="GENERATED_NOT_STAGED":stager.commit_group(owner_date,result,
+            verify_source=lambda:assert_full_source_unchanged(before,inspect()))
+        result=dict(state="PARTIAL_CHUNKS")
+        if set(stager.completed_roots)=={str(r) for r in range(limits.root_chunks)}:
+            result=stager.finalize_date(owner_date,{int(k):v for k,v in expected_counts[owner_date].items()})
+            assert_full_source_unchanged(before,inspect())
     if result.get("validation_status")=="VALIDATED":
         # This is ONE DATE evidence, deliberately not a full-dataset publication handoff.
         batch=dict(result,input_dates=dates,required_input_dates=[d.isoformat() for d in plan.required_input_dates],
