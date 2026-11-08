@@ -47,6 +47,9 @@ Preparation does not authorise deployment, Glue runs, CTAS, repair or data chang
 - [ ] No source refresh, Catalog publication or outside writer overlaps checks;
   collect final fingerprints/metadata to bind all queries to the job snapshots.
 - [ ] `00_schema.sql`: zero mismatch rows.
+- [ ] Rendered `01_dataset_partitions.sql`: 28 HI or 27 LI PASS dates for
+  the currently published dataset. HI checks may finish before LI is available,
+  provided no table-wide publication/recovery overlaps the acceptance window.
 - [ ] `01_partitions.sql`: exactly 55 PASS dates after both publications;
   if only one is published, full HI/LI acceptance remains incomplete.
 - [ ] Rendered `02_source.sql` for HI and LI: exact baseline matches,
@@ -57,6 +60,9 @@ Preparation does not authorise deployment, Glue runs, CTAS, repair or data chang
   no duplicate sequence IDs or ordered chains; retain label distributions.
 - [ ] Rendered `04_lineage.sql`: member count equals 2*pairs + 3*triples;
   zero missing/duplicate source matches, changed attributes or bank/account/time links.
+- [ ] If lineage is split with `--owner-date`, retain every 28 HI / 27 LI date
+  result, including zeros; no duplicate or missing scopes. Sum member counts
+  across dates and reconcile to the full accepted pair/triple totals.
 - [ ] Rendered `05_path_inventory.sql`: no bad path shapes; every actual path
   belongs to the exact accepted version and date; compare object inventory and
   Glue locations independently for zero-row dates and stale-file exclusion.
@@ -66,6 +72,11 @@ Preparation does not authorise deployment, Glue runs, CTAS, repair or data chang
   exact projections/output counts, no truncation/filtering and boundary limits.
   These checks do not independently regenerate every eligible full-data chain.
 - [ ] Investigate any difference; keep status NOT ACCEPTED until resolved.
+
+The reported approximately 496-million-candidate HI probe is profiling evidence,
+not an accepted sequence count. Retain its exact metric definition, scope,
+JobRunId and source/release references. Do not change growth limits or rules
+as part of validation. See [READY_TO_RUN.md](READY_TO_RUN.md) for the run order.
 
 Local binding review (downloaded JSON only; no AWS client):
 

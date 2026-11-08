@@ -3,6 +3,9 @@
 Status: **PREPARED ONLY — LIVE RUNS AND ACCEPTANCE PENDING**.
 Fill from measured run evidence; send to Sonia after the generation owner reviews it.
 This is documentation, not a deployable Step Functions definition or run command.
+Immediate read-only check order and Xiang Ying's data handoff fields are in
+[READY_TO_RUN.md](READY_TO_RUN.md). The generation owner's reported 496-million
+candidate probe does not establish final counts, publication or acceptance.
 
 | Field | Contract / value to complete |
 |---|---|
@@ -81,6 +84,7 @@ cancel an in-flight Spark action. Do not put secrets into public evidence.
 | Registered dates / accepted version | pending | pending |
 | Source row / positive totals reconciled | pending | pending |
 | Athena acceptance IDs and zero-error results | pending | pending |
+| All-date lineage results / chunk reconciliation if used | pending | pending |
 | Workers / runtime / DPU / cost evidence | pending | pending |
 | Boundary notes / Role 6 acknowledgment | pending | pending |
 

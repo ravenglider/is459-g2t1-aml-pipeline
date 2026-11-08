@@ -1,5 +1,5 @@
 -- Run only after schema, source-ID, output-ID and array checks pass.
--- This is a complete selected-dataset scan, not a sample or top-N check.
+-- Default: full selected dataset. Optional owner-date chunks require ALL dates to pass.
 -- PASS: zero bad_*; compare member_rows to 2*pairs+3*triples from accepted counts.
 WITH members AS (
     SELECT q.sequence_id,q.sequence_length,q.start_date,u.txn_id,u.member_position,
@@ -11,12 +11,13 @@ WITH members AS (
            element_at(q.txn_ids,u.member_position+1) AS next_txn_id
     FROM is459_g2t1_aml.bq2_sequences q
     CROSS JOIN UNNEST(q.txn_ids) WITH ORDINALITY AS u(txn_id,member_position)
-    WHERE q.dataset='__DATASET__'
+    WHERE q.dataset='__DATASET__'__OWNER_FILTER__
 ), source AS (
     SELECT txn_id,txn_ts,from_bank,from_account,to_bank,to_account,
            payment_format,payment_currency,receiving_currency,is_laundering
     FROM is459_g2t1_aml.transactions_clean
-    WHERE dataset='__DATASET__' AND txn_date BETWEEN '2022-09-01' AND '__LAST_DATE__'
+    WHERE dataset='__DATASET__'
+      AND txn_date BETWEEN '__LINEAGE_FIRST_DATE__' AND '__LINEAGE_LAST_DATE__'
 ), joined AS (
     SELECT m.sequence_id,m.member_position,m.sequence_length,
            count(s.txn_id) AS source_matches,
@@ -33,7 +34,7 @@ WITH members AS (
     LEFT JOIN source n ON m.next_txn_id=n.txn_id
     GROUP BY m.sequence_id,m.member_position,m.sequence_length
 )
-SELECT '__DATASET__' AS dataset,count(*) AS member_rows,
+SELECT '__DATASET__' AS dataset,'__OWNER_LABEL__' AS owner_scope,count(*) AS member_rows,
        count_if(source_matches<>1) AS bad_member_source_matches,
        coalesce(sum(attribute_errors),0) AS bad_member_attributes,
        coalesce(sum(link_errors),0) AS bad_adjacent_links

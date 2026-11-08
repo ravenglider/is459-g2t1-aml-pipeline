@@ -138,6 +138,42 @@ class SQLPreparationTests(unittest.TestCase):
     def test_reject_path_traversal(self):
         with self.assertRaises(ValueError): sql.render("HI-Medium","../../run_graph.py")
 
+    def test_lineage_chunk_uses_owner_and_two_day_lookahead(self):
+        rendered=sql.render('HI-Medium','04_lineage.sql','2022-09-03')
+        self.assertIn("q.start_date='2022-09-03'",rendered)
+        self.assertIn("txn_date BETWEEN '2022-09-03' AND '2022-09-05'",rendered)
+        self.assertIn("'2022-09-03' AS owner_scope",rendered)
+
+    def test_lineage_boundary_chunks_stop_at_extract_end(self):
+        for dataset in sql.SPECS:
+            last=sql.SPECS[dataset]['last']
+            for day in review.dates(dataset)[-2:]:
+                rendered=sql.render(dataset,'04_lineage.sql',day)
+                self.assertIn("txn_date BETWEEN '"+day+"' AND '"+last+"'",rendered)
+
+    def test_lineage_rejects_invalid_or_outside_owner_dates(self):
+        for dataset,day in [('HI-Medium','2022-08-31'),('HI-Medium','2022-09-29'),
+                            ('LI-Medium','2022-09-28'),('LI-Medium','2022-9-1'),
+                            ('HI-Medium',"2022-09-01' OR true--")]:
+            with self.assertRaises(ValueError): sql.render(dataset,'04_lineage.sql',day)
+
+    def test_owner_date_cannot_narrow_source_baselines_or_other_checks(self):
+        for query in sql.QUERIES:
+            if query!='04_lineage.sql':
+                with self.assertRaises(ValueError): sql.render('HI-Medium',query,'2022-09-01')
+
+    def test_default_lineage_still_covers_full_dataset(self):
+        rendered=sql.render('LI-Medium','04_lineage.sql')
+        self.assertNotIn('q.start_date=',rendered)
+        self.assertIn("txn_date BETWEEN '2022-09-01' AND '2022-09-27'",rendered)
+        self.assertIn("'ALL' AS owner_scope",rendered)
+
+    def test_all_55_lineage_chunks_render_without_placeholders(self):
+        rendered=[sql.render(dataset,'04_lineage.sql',day)
+                  for dataset in sql.SPECS for day in review.dates(dataset)]
+        self.assertEqual(len(set(rendered)),55)
+        self.assertTrue(all('__' not in text for text in rendered))
+
     def test_baselines_match_generation_source_contract_without_importing_spark(self):
         tree=ast.parse((VALIDATION.parent/'sequence_full_source.py').read_text(encoding='utf-8'))
         datasets=next(n.value for n in tree.body if isinstance(n,ast.Assign)

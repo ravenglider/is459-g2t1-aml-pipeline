@@ -8,6 +8,11 @@ The full Role 5 implementation from the starting branch is preserved. The user
 authorised publishing this validation branch for owner review; integration into
 main remains a separate coordinated step.
 
+Start with [READY_TO_RUN.md](READY_TO_RUN.md) for the immediate run order,
+per-dataset acceptance, date-by-date lineage option and Sonia/Role 6 handoff.
+The reported 496-million-candidate probe is generation profiling, not an
+expected accepted sequence count. No generation limit or rule is changed here.
+
 ## Scope agreed in the two prompts
 
 The second prompt supersedes only the starting-branch instruction: start from
@@ -32,8 +37,9 @@ be committed and pushed for review; do not merge it into main without coordinati
    entire validation window. Retain the job's actual arguments, immutable
    generation manifest and separate publication receipt. Bind checks to those
    exact source fingerprints and published partition locations.
-2. Use `00_schema.sql` and `01_partitions.sql` in Athena engine 3. They are
-   read-only and check the shared table's schema and all 28 HI / 27 LI dates.
+2. Use `00_schema.sql` and rendered `01_dataset_partitions.sql` in Athena engine 3
+   for the selected publication. Use shared `01_partitions.sql` after both are
+   ready. They check the schema and all 28 HI / 27 LI dates, including empty dates.
    Also retain Glue GetTable/GetPartitions exports for physical types, ordered
    partition keys and exact locations, including empty dates.
 3. Render `02_source.sql`, `03_sequences.sql`, `04_lineage.sql` and

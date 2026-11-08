@@ -16,11 +16,18 @@ pushing the preparation pack to `role5/full-validation` for owner review only.
 No commit/merge into main, AWS API call, Glue job, production table creation or
 dataset modification was performed.
 
+Deadline update: the owner reports approximately 496 million potential pair
+candidates for the first HI owner date. Probe identity/definition and full-output
+evidence are not supplied. Reviewed the owner's newer `06033b8` commit remotely:
+it adds a source-fingerprint inspection helper and tests, without changing the
+agreed schema, generation/publication contract or source baselines. It was not
+merged into this validation branch and no probe/job was run here.
+
 ## Prepared files
 
 | Files | Purpose |
 |---|---|
-| `00_schema.sql`, `01_partitions.sql` | Exact 21-column contract and 55 registered owner dates, including empty dates |
+| `00_schema.sql`, `01_partitions.sql`, `01_dataset_partitions.sql` | Exact contract, selected-dataset coverage and final 55 registered owner dates, including empty dates |
 | `02_source.sql` | Rendered HI/LI source baselines, uniqueness, required fields, timestamps and daily coverage |
 | `03_sequences.sql` | Daily pair/triple counts, array alignment, SHA-256 identity, labels, timing, strings and duplicate chains |
 | `04_lineage.sql` | Every member's source existence/attributes and adjacent bank/account/time continuity |
@@ -28,17 +35,19 @@ dataset modification was performed.
 | `render_acceptance.py` | Local, allowlisted HI/LI SQL rendering; no execution |
 | `review_run.py` | Local downloaded-manifest/publication/Catalog evidence binding checks |
 | `tests/test_acceptance_preparation.py` | Focused schema/renderer and fail-closed evidence tests |
-| `RUN_EVIDENCE.md`, `SONIA_HANDOFF.md`, `README.md` | Acceptance gates, source-population/boundary evidence and integration handoff template |
+| `READY_TO_RUN.md`, `RUN_EVIDENCE.md`, `SONIA_HANDOFF.md`, `README.md` | Immediate run order, acceptance gates, source/boundary evidence and Sonia/Role 6 handoff |
 
 ## Checks performed
 
-- **20 focused local tests passed.** Includes both datasets, explicit zero-output
+- **26 focused local tests passed.** Includes both datasets, explicit zero-output
   dates, missing/duplicate/reversed Catalog dates, mixed run locations, changed
   source/manifest bindings, inconsistent counts, boolean-count rejection and
   unverified publication rejection. Schema names/types/order and source baselines
   are checked against the existing implementation without importing Spark.
-- **18 SQL statements parsed** for Trino using SQLGlot 30.30.0: shared schema and
-  partition queries plus every rendered HI/LI statement. Parser downloaded into
+  Includes full/default versus all 55 owner-date lineage scopes, extract-end
+  lookahead, invalid-date rejection and protection of full-source denominators.
+- **75 SQL statements parsed** for Trino using SQLGlot 30.30.0: 20 shared/rendered
+  HI/LI statements plus all 55 owner-date lineage chunks. Parser downloaded into
   a temporary directory with wheel SHA-256 verified against PyPI metadata;
   no project dependency or generator environment was changed.
 - Read-only SQL review: SELECT/WITH only; no DDL, CTAS, repair, inserts or deletes.
@@ -71,7 +80,7 @@ executed in Athena. Local fixtures are synthetic, not production evidence.
    Do not fill the handoff with proposed sizing or sample timings as full results.
 6. The teammate's **387 local tests are reported prior results**, not rerun or
    recertified here. The available local environment did not provide a usable
-   WSL/PySpark runtime; the added 20 tests use the existing local Python runtime.
+   WSL/PySpark runtime; the added 26 tests use the existing local Python runtime.
 7. Older README/schema status paragraphs predate the new production code.
    This pack follows `FULL_GENERATION.md`, `FULL_PUBLICATION.md` and the current
    implementation; resolving historical wording is left to the generation owner.
