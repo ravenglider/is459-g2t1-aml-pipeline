@@ -14,6 +14,12 @@ Copy-ready CLI examples are in [CLOUDSHELL_COMMANDS.md](CLOUDSHELL_COMMANDS.md).
 Use [RESULTS_CHECKLIST.md](RESULTS_CHECKLIST.md) for all 55 owner dates and
 [READER_PAUSE_AND_HANDOFF.md](READER_PAUSE_AND_HANDOFF.md) for the explicit
 confirmation requests and final handoff message. Confirmations remain pending.
+
+LI ownership preparation is in [LI_WORKSTREAM.md](LI_WORKSTREAM.md), with a
+[disabled argument worksheet](LI_ARGUMENTS.template.json). The newly requested
+bounded generator/staging-only interface is not yet present in the reviewed
+remote `6b50da4` release. No separate algorithm or AWS execution is introduced;
+future LI staging requires the tested shared code and explicit run approval.
 The reported 496-million-candidate probe is generation profiling, not an
 expected accepted sequence count. No generation limit or rule is changed here.
 

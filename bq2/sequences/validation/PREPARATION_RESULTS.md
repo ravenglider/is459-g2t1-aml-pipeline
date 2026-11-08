@@ -40,10 +40,11 @@ merged into this validation branch and no probe/job was run here.
 | `CLOUDSHELL_COMMANDS.md` | Exact future metadata/query/poll/result-download commands; gated on coordination and not executed here |
 | `RESULTS_CHECKLIST.md`, `READER_PAUSE_AND_HANDOFF.md` | Compact 55-date result tracker, explicit confirmation requests and final message placeholders |
 | `.gitignore` | Keep generated SQL and private evidence/approval copies outside Git |
+| `LI_WORKSTREAM.md`, `LI_ARGUMENTS.template.json` | LI ownership preparation: exact source/rules, disabled argument worksheet, deployment gates and staging evidence requirements |
 
 ## Checks performed
 
-- **33 focused local tests passed.** Includes both datasets, explicit zero-output
+- **36 focused local tests passed.** Includes both datasets, explicit zero-output
   dates, missing/duplicate/reversed Catalog dates, mixed run locations, changed
   source/manifest bindings, inconsistent counts, boolean-count rejection and
   unverified publication rejection. Schema names/types/order and source baselines
@@ -52,6 +53,8 @@ merged into this validation branch and no probe/job was run here.
   lookahead, invalid-date rejection and protection of full-source denominators.
   Query-file tests cover statement splitting, 75 distinct file hashes/phases,
   complete owner dates and refusal to overwrite prepared query folders.
+  LI worksheet tests verify fixed source/schema scope, disabled execution and
+  publication, and unresolved fingerprints/limits/release rather than invented values.
 - **75 SQL statements parsed** for Trino using SQLGlot 30.30.0: 20 shared/rendered
   HI/LI statements plus all 55 owner-date lineage chunks. Parser downloaded into
   a temporary directory with wheel SHA-256 verified against PyPI metadata;
@@ -86,7 +89,7 @@ executed in Athena. Local fixtures are synthetic, not production evidence.
    Do not fill the handoff with proposed sizing or sample timings as full results.
 6. The teammate's **387 local tests are reported prior results**, not rerun or
    recertified here. The available local environment did not provide a usable
-   WSL/PySpark runtime; the added 33 tests use the existing local Python runtime.
+   WSL/PySpark runtime; the added 36 tests use the existing local Python runtime.
 7. Older README/schema status paragraphs predate the new production code.
    This pack follows `FULL_GENERATION.md`, `FULL_PUBLICATION.md` and the current
    implementation; resolving historical wording is left to the generation owner.
@@ -99,3 +102,11 @@ messages. Both explicit confirmations, the actual window and paid-query approval
 remain pending. No publication or paid query has been authorised or executed by
 this workstream. The prepared CLI examples would write Athena result objects and
 incur query charges when later run, so their execution needs separate coordination.
+
+New LI preparation reviewed the owner's remote through `6b50da4`: source
+fingerprint helper plus HI-specific growth probes exist, but the shared bounded
+chunked generator is not committed there yet. The old integrated entrypoint
+requires production publication and cannot be used as a staging-only CLI.
+No owner code was merged/modified or executed. LI staging remains blocked on the
+tested shared interface/protocol, LI-specific source/limit evidence and explicit
+budget/run approval. Overlapping staging needs separate isolation/resource review.

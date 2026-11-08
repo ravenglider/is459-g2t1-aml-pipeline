@@ -3,6 +3,7 @@ import ast
 from copy import deepcopy
 import re
 import hashlib
+import json
 import tempfile
 from pathlib import Path
 import sys
@@ -124,6 +125,37 @@ class EvidenceBindingTests(unittest.TestCase):
 
 
 class QueryFilePreparationTests(unittest.TestCase):
+    def test_li_worksheet_matches_source_and_schema_contract(self):
+        value=json.loads((VALIDATION/'LI_ARGUMENTS.template.json').read_text())
+        self.assertEqual(value['dataset'],'LI-Medium')
+        source=value['source_contract']; output=value['output_contract']
+        self.assertEqual(source['reported_cleaned_transactions'],sql.SPECS['LI-Medium']['rows'])
+        self.assertEqual(source['reported_positive_transactions'],sql.SPECS['LI-Medium']['positive'])
+        self.assertEqual((source['first_owner_date'],source['last_owner_date'],source['owner_dates']),
+                         ('2022-09-01','2022-09-27',27))
+        self.assertEqual((output['rule_version'],output['logical_columns'],output['parquet_data_columns']),('v1',21,19))
+        self.assertEqual(output['partition_keys'],['dataset','start_date'])
+
+    def test_li_worksheet_does_not_authorise_execution_or_publication(self):
+        value=json.loads((VALIDATION/'LI_ARGUMENTS.template.json').read_text())
+        self.assertFalse(value['output_contract']['production_publication_authorised'])
+        self.assertFalse(value['shared_release']['staging_only_interface_verified'])
+        args=value['existing_interface_reference_only']
+        for flag in ('--ALLOW_AWS_WRITES','--ALLOW_PUBLICATION','--READERS_PAUSED','--NO_REFRESH_ACKNOWLEDGED'):
+            self.assertEqual(args[flag],'false')
+        self.assertTrue(all(v is False for k,v in value['approvals'].items() if k.endswith('_approved')))
+        self.assertEqual(value['approvals']['approval_references'],[])
+
+    def test_li_worksheet_does_not_invent_fingerprints_limits_or_release(self):
+        value=json.loads((VALIDATION/'LI_ARGUMENTS.template.json').read_text())
+        self.assertIsNone(value['shared_release']['bounded_generator_commit'])
+        for k,v in value['existing_interface_reference_only'].items():
+            if k.startswith('--MAX_') or k.endswith('_FINGERPRINT'):
+                self.assertIsNone(v)
+        source=value['source_contract']
+        self.assertTrue(all(source[k] is None for k in ('actual_source_fingerprint',
+                            'actual_table_fingerprint','actual_partitions_fingerprint')))
+
     def test_plan_has_75_unique_files_with_correct_hashes(self):
         plan=prepare.query_plan()
         self.assertEqual(len(plan),75)
