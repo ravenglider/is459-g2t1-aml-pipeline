@@ -2,6 +2,8 @@
 import ast
 from copy import deepcopy
 import re
+import hashlib
+import tempfile
 from pathlib import Path
 import sys
 import unittest
@@ -10,6 +12,7 @@ VALIDATION = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VALIDATION))
 import render_acceptance as sql
 import review_run as review
+import prepare_queries as prepare
 
 
 def fixture(dataset):
@@ -118,6 +121,49 @@ class EvidenceBindingTests(unittest.TestCase):
         parts[0]["Values"]=[]
         with self.assertRaisesRegex(ValueError,"Malformed"):
             review.review(m,p,parts)
+
+
+class QueryFilePreparationTests(unittest.TestCase):
+    def test_plan_has_75_unique_files_with_correct_hashes(self):
+        plan=prepare.query_plan()
+        self.assertEqual(len(plan),75)
+        self.assertEqual(len({q['path'] for q in plan}),75)
+        self.assertTrue(all(q['sha256']==hashlib.sha256(q['sql'].encode('utf-8')).hexdigest() for q in plan))
+
+    def test_only_full_source_queries_have_prepublication_source_phase(self):
+        source=[q for q in prepare.query_plan() if q['phase']=='source']
+        self.assertEqual(len(source),4)
+        self.assertTrue(all('transactions_clean' in q['sql'] and 'bq2_sequences' not in q['sql'] for q in source))
+
+    def test_every_owner_date_has_one_lineage_file(self):
+        for dataset in sql.SPECS:
+            items=[q for q in prepare.query_plan() if q['dataset']==dataset and q['phase']=='lineage_date']
+            self.assertEqual([q['owner_date'] for q in items],review.dates(dataset))
+            self.assertTrue(all(len(prepare.split_sql(q['sql']))==1 for q in items))
+
+    def test_split_preserves_quoted_and_comment_semicolons(self):
+        source="SELECT 'a;''b', \"name;here\"; -- comment;\n/* note; */ SELECT 2;"
+        statements=prepare.split_sql(source)
+        self.assertEqual(len(statements),2)
+        self.assertIn("'a;''b'",statements[0])
+        self.assertIn('SELECT 2',statements[1])
+
+    def test_comment_only_input_is_not_a_query(self):
+        self.assertEqual(prepare.split_sql('-- only a note;\n/* another; */'),[])
+
+    def test_incomplete_quotes_and_comments_rejected(self):
+        for source in ("SELECT 'unfinished",'SELECT "unfinished','/* unfinished'):
+            with self.assertRaises(ValueError): prepare.split_sql(source)
+
+    def test_preparation_writes_local_files_and_refuses_overwrite(self):
+        with tempfile.TemporaryDirectory() as folder:
+            output=Path(folder)/'queries'
+            self.assertEqual(prepare.write_plan(output),75)
+            self.assertEqual(len(list(output.rglob('*.sql'))),75)
+            import json
+            manifest=json.loads((output/'query-plan.json').read_text())
+            self.assertEqual(manifest['status'],'PREPARED_NOT_EXECUTED')
+            with self.assertRaises(FileExistsError): prepare.write_plan(output)
 
 
 class SQLPreparationTests(unittest.TestCase):

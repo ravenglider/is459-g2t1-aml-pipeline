@@ -10,6 +10,10 @@ main remains a separate coordinated step.
 
 Start with [READY_TO_RUN.md](READY_TO_RUN.md) for the immediate run order,
 per-dataset acceptance, date-by-date lineage option and Sonia/Role 6 handoff.
+Copy-ready CLI examples are in [CLOUDSHELL_COMMANDS.md](CLOUDSHELL_COMMANDS.md).
+Use [RESULTS_CHECKLIST.md](RESULTS_CHECKLIST.md) for all 55 owner dates and
+[READER_PAUSE_AND_HANDOFF.md](READER_PAUSE_AND_HANDOFF.md) for the explicit
+confirmation requests and final handoff message. Confirmations remain pending.
 The reported 496-million-candidate probe is generation profiling, not an
 expected accepted sequence count. No generation limit or rule is changed here.
 

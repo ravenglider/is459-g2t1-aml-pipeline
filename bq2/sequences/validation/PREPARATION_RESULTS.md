@@ -33,19 +33,25 @@ merged into this validation branch and no probe/job was run here.
 | `04_lineage.sql` | Every member's source existence/attributes and adjacent bank/account/time continuity |
 | `05_path_inventory.sql` | Observed Parquet version/date paths for receipt reconciliation |
 | `render_acceptance.py` | Local, allowlisted HI/LI SQL rendering; no execution |
+| `prepare_queries.py` | Local creation of 75 single-statement query files and their phase/hash plan; no AWS calls |
 | `review_run.py` | Local downloaded-manifest/publication/Catalog evidence binding checks |
 | `tests/test_acceptance_preparation.py` | Focused schema/renderer and fail-closed evidence tests |
 | `READY_TO_RUN.md`, `RUN_EVIDENCE.md`, `SONIA_HANDOFF.md`, `README.md` | Immediate run order, acceptance gates, source/boundary evidence and Sonia/Role 6 handoff |
+| `CLOUDSHELL_COMMANDS.md` | Exact future metadata/query/poll/result-download commands; gated on coordination and not executed here |
+| `RESULTS_CHECKLIST.md`, `READER_PAUSE_AND_HANDOFF.md` | Compact 55-date result tracker, explicit confirmation requests and final message placeholders |
+| `.gitignore` | Keep generated SQL and private evidence/approval copies outside Git |
 
 ## Checks performed
 
-- **26 focused local tests passed.** Includes both datasets, explicit zero-output
+- **33 focused local tests passed.** Includes both datasets, explicit zero-output
   dates, missing/duplicate/reversed Catalog dates, mixed run locations, changed
   source/manifest bindings, inconsistent counts, boolean-count rejection and
   unverified publication rejection. Schema names/types/order and source baselines
   are checked against the existing implementation without importing Spark.
   Includes full/default versus all 55 owner-date lineage scopes, extract-end
   lookahead, invalid-date rejection and protection of full-source denominators.
+  Query-file tests cover statement splitting, 75 distinct file hashes/phases,
+  complete owner dates and refusal to overwrite prepared query folders.
 - **75 SQL statements parsed** for Trino using SQLGlot 30.30.0: 20 shared/rendered
   HI/LI statements plus all 55 owner-date lineage chunks. Parser downloaded into
   a temporary directory with wheel SHA-256 verified against PyPI metadata;
@@ -80,10 +86,16 @@ executed in Athena. Local fixtures are synthetic, not production evidence.
    Do not fill the handoff with proposed sizing or sample timings as full results.
 6. The teammate's **387 local tests are reported prior results**, not rerun or
    recertified here. The available local environment did not provide a usable
-   WSL/PySpark runtime; the added 26 tests use the existing local Python runtime.
+   WSL/PySpark runtime; the added 33 tests use the existing local Python runtime.
 7. Older README/schema status paragraphs predate the new production code.
    This pack follows `FULL_GENERATION.md`, `FULL_PUBLICATION.md` and the current
    implementation; resolving historical wording is left to the generation owner.
 
 Review the published validation branch with the owner before integration into main.
 Sonia retains ownership of deployment and shared orchestration.
+
+Latest coordination request: the user will send the Sonia/Xiang Ying reader-pause
+messages. Both explicit confirmations, the actual window and paid-query approval
+remain pending. No publication or paid query has been authorised or executed by
+this workstream. The prepared CLI examples would write Athena result objects and
+incur query charges when later run, so their execution needs separate coordination.

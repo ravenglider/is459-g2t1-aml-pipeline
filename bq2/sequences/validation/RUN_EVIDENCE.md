@@ -2,6 +2,8 @@
 
 Live status: **NOT RUN / NOT ACCEPTED**. Complete separately for HI and LI.
 Preparation does not authorise deployment, Glue runs, CTAS, repair or data changes.
+Copy-ready commands: [CLOUDSHELL_COMMANDS.md](CLOUDSHELL_COMMANDS.md).
+Compact dataset/date results: [RESULTS_CHECKLIST.md](RESULTS_CHECKLIST.md).
 
 ## Before the authorised run (generation owner / Sonia)
 
@@ -11,6 +13,9 @@ Preparation does not authorise deployment, Glue runs, CTAS, repair or data chang
   `glue_full_generation.py`, exact arguments and current AWS job definition.
 - [ ] Record account, region, UTC evidence, no-refresh agreement, measured
   growth limits and reader-pause agreement. Never fabricate or reuse acknowledgments.
+- [ ] Receive explicit current reader-pause confirmations from both Sonia and
+  Xiang Ying before any publication. The user sends the requests; both replies
+  are currently pending. Record owner acknowledgment, scope and expiry.
 - [ ] Capture complete paginated source S3 inventory and GetTable/GetPartitions
   metadata for the selected dataset, matching all three job fingerprints.
   Include object keys, sizes, ETags/version IDs where available and schema.

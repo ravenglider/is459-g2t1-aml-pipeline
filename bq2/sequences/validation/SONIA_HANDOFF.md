@@ -6,6 +6,9 @@ This is documentation, not a deployable Step Functions definition or run command
 Immediate read-only check order and Xiang Ying's data handoff fields are in
 [READY_TO_RUN.md](READY_TO_RUN.md). The generation owner's reported 496-million
 candidate probe does not establish final counts, publication or acceptance.
+The copy-ready final message and explicit Sonia/Xiang Ying confirmation tracker
+are in [READER_PAUSE_AND_HANDOFF.md](READER_PAUSE_AND_HANDOFF.md). Both pause
+confirmations remain pending; the user will send the team-chat requests.
 
 | Field | Contract / value to complete |
 |---|---|

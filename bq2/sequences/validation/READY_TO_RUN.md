@@ -6,6 +6,12 @@ Execute the read-only checks in Athena only after coordinating AWS access and a
 stable source/output window with the owners. Use engine 3, database
 `is459_g2t1_aml` and the agreed workgroup; record the actual engine/workgroup.
 
+For exact future AWS CLI submission, polling and evidence-download commands,
+see [CLOUDSHELL_COMMANDS.md](CLOUDSHELL_COMMANDS.md). Those commands incur query
+costs/result writes when actually executed and require separate coordination.
+The user will send [reader-pause requests](READER_PAUSE_AND_HANDOFF.md); no
+confirmation has been received or publication authorised here.
+
 ## What is ready now
 
 | Availability | Checks that can start | Gate |

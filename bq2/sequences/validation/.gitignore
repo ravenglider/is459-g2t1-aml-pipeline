@@ -1,0 +1,3 @@
+# Downloaded run evidence, generated SQL, approvals and query outputs stay private.
+/generated/
+/evidence/
