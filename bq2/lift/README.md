@@ -14,12 +14,12 @@ Existing resources: region `us-east-1`, database `is459_g2t1_aml`, Athena workgr
 
 ## Inputs and outputs
 
-| File | Reads | Proposed output table / processed-bucket prefix |
-|---|---|---|
-| `bq2_lift.sql` | `bq2_sequences` | `bq2_lift` / `bq2_lift/` |
-| `tradeoff.sql` | lift, sequences (`final_txn_id`), `transactions_clean` | `bq2_tradeoff` / `bq2_tradeoff/` |
-| `robustness.sql` | lift | `bq2_robustness` / `bq2_robustness/` |
-| `sankey.sql` | lift | `bq2_sankey` / `bq2_sankey/` |
+| File             | Reads                                                  | Proposed output table / processed-bucket prefix |
+| ---------------- | ------------------------------------------------------ | ----------------------------------------------- |
+| `bq2_lift.sql`   | `bq2_sequences`                                        | `bq2_lift` / `bq2_lift/`                        |
+| `tradeoff.sql`   | lift, sequences (`final_txn_id`), `transactions_clean` | `bq2_tradeoff` / `bq2_tradeoff/`                |
+| `robustness.sql` | lift                                                   | `bq2_robustness` / `bq2_robustness/`            |
+| `sankey.sql`     | lift                                                   | `bq2_sankey` / `bq2_sankey/`                    |
 
 All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-g2t1-aml-processed-bucket/`. Input locations: [input_contract.md](input_contract.md).
 
@@ -70,16 +70,33 @@ Local verification: `python3 -m unittest discover -s bq2/lift/tests -v`. Tests e
 
 ## Step Functions info for Sonia
 
-| Field | Value |
-|---|---|
-| Job type | Athena `arn:aws:states:::athena:startQueryExecution.sync` |
-| Exact SQL | One CTAS per file above, in that order |
-| Context | Database `is459_g2t1_aml`, workgroup `primary` |
-| Output | Four tables/prefixes above |
+| Field      | Value                                                                                     |
+| ---------- | ----------------------------------------------------------------------------------------- |
+| Job type   | Athena `arn:aws:states:::athena:startQueryExecution.sync`                                 |
+| Exact SQL  | One CTAS per file above, in that order                                                    |
+| Context    | Database `is459_g2t1_aml`, workgroup `primary`                                            |
+| Output     | Four tables/prefixes above                                                                |
 | Depends on | Validated v1 HI/LI sequence occurrences and both cleaned partitions (no membership table) |
-| Runtime | Not measured; capture time and bytes scanned on real runs |
+| Runtime    | Not measured; capture time and bytes scanned on real runs                                 |
 
 After fetching current main, the checked-in state machine has live ETL/BQ1 tasks; BQ2 remains Pass placeholders. These files do not update the deployed state machine. Gate the branch on quality-check success; do not blindly retry CTAS against fixed prefixes. The existing `is459-g2t1-reset-outputs` Lambda is reusable for a coordinated refresh; ask Sonia to register only the four Role 6 destinations, preserving existing outputs. She must prevent concurrent writers and ensure both HI/LI inputs are ready. Alternatively use consistent per-run names/locations. Claim automation only after a real successful execution.
+
+## Pipeline automation (Role 1)
+
+The Role 6 SQL now runs inside `is459-g2t1-pipeline`, in the BQ2 branch straight after `BQ2_Publish`, so it always reads the sequence copy that has just passed every gate. `bq2/sequences/athena/build_asl.py` copies the statements from the files above into the state machine at build time; edit the SQL here and rebuild, never the JSON.
+
+| State                          | What it runs                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BQ2_Lift_Reset`               | `is459-g2t1-reset-outputs` drops `bq2_lift`, `bq2_tradeoff_flagged`, `bq2_tradeoff`, `bq2_robustness`, `bq2_sankey` and empties their folders                                                                                                                                                                                                                        |
+| `BQ2_Lift`                     | `bq2_lift.sql`                                                                                                                                                                                                                                                                                                                                                       |
+| `BQ2_Flagged_HI2/HI3/LI2/LI3`  | trade-off Stage 1 from `recovery/bq2_tradeoff_two_stage.sql`: one CTAS, then three INSERTs, one at a time                                                                                                                                                                                                                                                            |
+| `BQ2_Tradeoff`                 | `recovery/tradeoff_stage2.sql`                                                                                                                                                                                                                                                                                                                                       |
+| `BQ2_Robustness`, `BQ2_Sankey` | `robustness.sql`, `sankey.sql`                                                                                                                                                                                                                                                                                                                                       |
+| `BQ2_Lift_Check`               | `pipeline_gate.sql`: lift and Sankey totals equal `bq2_sequences` per dataset and length, 12 lift groups, no duplicate ranks, every expected Stage 1 group present with no duplicate final IDs and ranks 1 to 10, 48 trade-off rows with zero accounting errors, one robustness row per HI top-10 pattern. Any failure stops the run with the check row as the cause |
+
+Reruns are safe because the reset runs first, so the INSERTs never append to an earlier run's rows. Athena steps are retried only when Athena refuses to start the query. `lift_only.asl.json` is the same chain as a small state machine for a quick test. `tests/pipeline_chain_check.py` runs the exact embedded statements on synthetic data in DuckDB, checks the gate passes, and checks that nine corruptions (duplicate INSERT, missing Stage 1 group, lost rows, accounting error, changed sequences, bad rank) are all blocked.
+
+Trade-off: during the few minutes the chain runs, the four Tableau sources are being rebuilt, so refresh the dashboards after the run succeeds.
 
 ## Contribution summary
 
@@ -92,9 +109,7 @@ Implemented v1-aligned sequence lift by length/support policy, distinct-final ta
 
 Array validation references: [AWS UNNEST](https://docs.aws.amazon.com/athena/latest/ug/flattening-arrays.html), [array reductions](https://docs.aws.amazon.com/athena/latest/ug/arrays-and-aggregation.html), and [Athena SELECT / ordinality](https://docs.aws.amazon.com/athena/latest/ug/select.html). These references do not replace execution against the development table.
 
-
 Sample Tableau progress (8 November 2026): base worksheets and combined pairs/triples dashboards rendered, with nine screenshots and business descriptions in [viz/screenshots](../../viz/screenshots/README.md). The checklist top-3 pairs match the lift export. Xiang Ying reports checklist control tests passed; the dashboard shows the expected top-5 pairs. Current native workbook save/inspection/delivery and final HI/LI analysis remain pending.
-
 
 Final input check (9 November 2026): 21-column schema is compatible. The published bq2_sequences name is a view over partitioned bq2_sequences_a; the initial SHOW PARTITIONS error was against the view, not a storage failure. Physical partition listing succeeded (screenshot 24). Exact date-coverage summary and final acceptance evidence remain to be confirmed; see [results](results.md#final-publication-view-and-underlying-partitions--9-november-2026).
 
@@ -105,7 +120,6 @@ Final-run readiness update (9 November 2026): Sonia reports gated publication pa
 Final lift created (9 November 2026): production bq2_lift CTAS succeeded, 6.882 sec and 1.74 GB scanned (screenshot 27), after user-confirmed empty final output destinations. Final lift reconciliation/rankings, trade-off/robustness/Sankey tables and final Tableau updates remain pending.
 
 Final lift totals checked (9 November 2026): all four HI/LI length groups present and baseline arithmetic matches the displayed counts. Counts are recorded in [results](results.md#final-lift-totals--9-november-2026); formal upstream acceptance comparison remains pending receipt availability. Next: production tradeoff.sql; final robustness/Sankey outputs and Tableau updates still pending.
-
 
 ## Full-scale trade-off recovery
 

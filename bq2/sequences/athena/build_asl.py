@@ -10,11 +10,22 @@ BQ2 branch:
   -> publish: bq2_sequences view switches to the new copy -> Role 6.
 Any failure stops before publish, so the live copy is untouched. Athena tasks are retried only
 when Athena refuses to start a query (nothing written yet), never after a query has run.
+Role 6 (after publish), SQL read from bq2/lift at build time:
+  reset the 5 Role 6 tables -> bq2_lift -> trade-off stage 1 (CTAS + 3 INSERTs, in order)
+  -> bq2_tradeoff -> bq2_robustness -> bq2_sankey -> lift gate (bq2/lift/pipeline_gate.sql).
+
+    python3 build_asl.py --lift-only   -> also writes bq2/lift/lift_only.asl.json, a small
+                                          state machine with just the Role 6 chain for a quick test
 """
+import sys
 import json
 from pathlib import Path
 
-ASL = Path(__file__).resolve().parents[3] / "ingestion/stepfunctions/is459-g2t1-pipeline.asl.json"
+ROOT = Path(__file__).resolve().parents[3]
+ASL = ROOT / "ingestion/stepfunctions/is459-g2t1-pipeline.asl.json"
+LIFT = ROOT / "bq2/lift"
+RESET = "is459-g2t1-reset-outputs"
+LIFT_TABLES = ["bq2_lift", "bq2_tradeoff_flagged", "bq2_tradeoff", "bq2_robustness", "bq2_sankey"]
 CONTROL = "is459-g2t1-bq2-control"
 ATHENA = {"WorkGroup": "primary", "QueryExecutionContext": {"Database": "is459_g2t1_aml"},
           "ResultConfiguration": {"OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"}}
@@ -128,8 +139,63 @@ def bq2_states():
                               "Switch the bq2_sequences view to the new copy (the old copy stays as rollback)"),
         "BQ2_Done": {"Type": "Pass", "Comment": "Keep only a small summary for the rest of the pipeline",
                      "Parameters": {"live.$": f"{P}.target_table", "previous.$": f"{P}.live"},
-                     "ResultPath": "$.bq2", "Next": "BQ2_LiftAnalysis"},
+                     "ResultPath": "$.bq2", "Next": "BQ2_Lift_Reset"},
     }
+    return states
+
+
+def sql_statements(path):
+    """Statements of a Role 6 file, comments removed, DROPs skipped (the reset Lambda does that)."""
+    body = "\n".join(l for l in path.read_text().splitlines() if not l.lstrip().startswith("--"))
+    out = [x.strip() for x in body.split(";") if x.strip()]
+    return [x for x in out if not x.upper().startswith("DROP")]
+
+
+def lift_queries():
+    one = lambda f: sql_statements(LIFT / f)
+    stage1 = one("recovery/bq2_tradeoff_two_stage.sql")[:4]
+    assert stage1[0].startswith("CREATE TABLE is459_g2t1_aml.bq2_tradeoff_flagged")
+    assert all(x.startswith("INSERT INTO is459_g2t1_aml.bq2_tradeoff_flagged") for x in stage1[1:])
+    q = [("Lift", "lift table", one("bq2_lift.sql")),
+         ("Flagged_HI2", "trade-off stage 1: HI pairs (create)", [stage1[0]]),
+         ("Flagged_HI3", "trade-off stage 1: HI triples", [stage1[1]]),
+         ("Flagged_LI2", "trade-off stage 1: LI pairs", [stage1[2]]),
+         ("Flagged_LI3", "trade-off stage 1: LI triples", [stage1[3]]),
+         ("Tradeoff", "trade-off stage 2", one("recovery/tradeoff_stage2.sql")),
+         ("Robustness", "LI robustness", one("robustness.sql")),
+         ("Sankey", "Sankey", one("sankey.sql"))]
+    for name, _, stmts in q:
+        assert len(stmts) == 1, (name, len(stmts))
+    return [(n, c, f"-- bq2 lift {n.lower()}\n" + st[0]) for n, c, st in q]
+
+
+def lift_states(end_next=None):
+    """Role 6 chain. Rerunnable: the reset drops all five tables first, so the INSERTs never append to old rows."""
+    def literal(sql, nxt, comment, result_path=None, keep_id=False):
+        st = athena("$", result_path, nxt, comment, keep_id)
+        st["Parameters"] = {"QueryString": sql, **ATHENA}
+        return st
+    queries = lift_queries()
+    names = [f"BQ2_{n}" for n, _, _ in queries]
+    states = {"BQ2_Lift_Reset": {
+        "Type": "Task", "Comment": "Role 6: drop the 5 Role 6 tables and empty their folders so the chain can rerun",
+        "Resource": "arn:aws:states:::lambda:invoke",
+        "Parameters": {"FunctionName": RESET, "Payload": {
+            "bucket": "is459-g2t1-aml-processed-bucket", "database": "is459_g2t1_aml",
+            "outputs": [{"table": t, "prefix": f"{t}/"} for t in LIFT_TABLES]}},
+        "Retry": LAMBDA_RETRY, "ResultPath": None, "Next": names[0]}}
+    for i, (n, comment, sql) in enumerate(queries):
+        nxt = names[i + 1] if i + 1 < len(names) else "BQ2_Lift_Check"
+        states[names[i]] = literal(sql, nxt, f"Role 6: {comment}")
+    gate_sql = (LIFT / "pipeline_gate.sql").read_text().strip().rstrip(";")
+    states["BQ2_Lift_Check"] = literal(gate_sql, "BQ2_Lift_Check_Result",
+                                       "Gate: lift, trade-off, robustness and Sankey reconcile with bq2_sequences",
+                                       "$.lift.checkq", keep_id=True)
+    states.update(gate("BQ2_Lift_Check", "$.lift.checkq.qid", "$.lift.check", "BQ2_Lift_Done", "BQ2_LiftCheckFailed"))
+    states["BQ2_LiftCheckFailed"] = fail("LiftCheckFailed", "States.JsonToString($.lift.check.row)")
+    states["BQ2_Lift_Done"] = {"Type": "Pass", "Comment": "Role 6 outputs rebuilt and checked",
+                               "Parameters": {"lift_check.$": "$.lift.check.ok"}, "ResultPath": "$.lift",
+                               **({"Next": end_next} if end_next else {"End": True})}
     return states
 
 
@@ -146,13 +212,19 @@ def main():
     if d["StartAt"] != "PipelineLock":
         d["States"] = {"PipelineLock": lock_state(d["StartAt"]), **d["States"]}
         d["StartAt"] = "PipelineLock"
-    branch = next(b for b in d["States"]["Analytics"]["Branches"] if "BQ2_LiftAnalysis" in b["States"])
-    lift = branch["States"]["BQ2_LiftAnalysis"]
-    branch["States"] = {**bq2_states(), "BQ2_LiftAnalysis": lift}
+    branch = next(b for b in d["States"]["Analytics"]["Branches"]
+                  if "BQ2_LiftAnalysis" in b["States"] or "BQ2_Lift_Reset" in b["States"])
+    branch["States"] = {**bq2_states(), **lift_states()}
     branch["StartAt"] = "BQ2_Plan"
     text = json.dumps(d, indent=2)
     ASL.write_text(text + "\n")
     print(f"wrote {ASL.name}: {len(text):,} characters")
+    if "--lift-only" in sys.argv:
+        small = {"Comment": "Role 6 chain only, for testing before it runs inside is459-g2t1-pipeline",
+                 "StartAt": "BQ2_Lift_Reset", "States": lift_states()}
+        out = LIFT / "lift_only.asl.json"
+        out.write_text(json.dumps(small, indent=2) + "\n")
+        print(f"wrote {out.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

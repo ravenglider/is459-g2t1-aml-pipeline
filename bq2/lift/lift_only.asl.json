@@ -1,0 +1,339 @@
+{
+  "Comment": "Role 6 chain only, for testing before it runs inside is459-g2t1-pipeline",
+  "StartAt": "BQ2_Lift_Reset",
+  "States": {
+    "BQ2_Lift_Reset": {
+      "Type": "Task",
+      "Comment": "Role 6: drop the 5 Role 6 tables and empty their folders so the chain can rerun",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "is459-g2t1-reset-outputs",
+        "Payload": {
+          "bucket": "is459-g2t1-aml-processed-bucket",
+          "database": "is459_g2t1_aml",
+          "outputs": [
+            {
+              "table": "bq2_lift",
+              "prefix": "bq2_lift/"
+            },
+            {
+              "table": "bq2_tradeoff_flagged",
+              "prefix": "bq2_tradeoff_flagged/"
+            },
+            {
+              "table": "bq2_tradeoff",
+              "prefix": "bq2_tradeoff/"
+            },
+            {
+              "table": "bq2_robustness",
+              "prefix": "bq2_robustness/"
+            },
+            {
+              "table": "bq2_sankey",
+              "prefix": "bq2_sankey/"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": null,
+      "Next": "BQ2_Lift"
+    },
+    "BQ2_Lift": {
+      "Type": "Task",
+      "Comment": "Role 6: lift table",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "-- bq2 lift lift\nCREATE TABLE is459_g2t1_aml.bq2_lift\nWITH (\n  format = 'PARQUET',\n  external_location = 's3://is459-g2t1-aml-processed-bucket/bq2_lift/'\n) AS\nWITH cutoffs (min_support) AS (VALUES (50), (100), (500)),\ncounts AS (\n  SELECT dataset, method_sequence, sequence_length,\n         COUNT(*) AS support_count, SUM(any_laundering) AS laundering_count\n  FROM is459_g2t1_aml.bq2_sequences\n  WHERE dataset IN ('HI-Medium', 'LI-Medium')\n  GROUP BY dataset, method_sequence, sequence_length\n), totals AS (\n  SELECT dataset, sequence_length, SUM(support_count) AS total_sequences,\n         SUM(laundering_count) AS total_laundering_sequences\n  FROM counts GROUP BY dataset, sequence_length\n), rates AS (\n  SELECT c.*, k.min_support, t.total_sequences, t.total_laundering_sequences,\n         CAST(c.laundering_count AS DOUBLE) / c.support_count AS laundering_rate,\n         CAST(t.total_laundering_sequences AS DOUBLE) / t.total_sequences AS baseline_rate,\n         CAST(c.support_count AS DOUBLE) / t.total_sequences AS support_share,\n         CASE WHEN c.support_count >= k.min_support THEN 1 ELSE 0 END AS eligible\n  FROM counts c JOIN totals t ON c.dataset = t.dataset AND c.sequence_length = t.sequence_length\n  CROSS JOIN cutoffs k\n), scored AS (\n  SELECT *, laundering_rate / NULLIF(baseline_rate, 0) AS lift FROM rates\n)\nSELECT *, CASE WHEN eligible = 1 AND lift IS NOT NULL THEN\n  ROW_NUMBER() OVER (\n    PARTITION BY dataset, sequence_length, min_support\n    ORDER BY eligible DESC, lift DESC, laundering_count DESC,\n             support_count DESC, method_sequence, sequence_length\n  ) END AS risk_rank\nFROM scored",
+        "WorkGroup": "primary",
+        "QueryExecutionContext": {
+          "Database": "is459_g2t1_aml"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Athena.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 6,
+          "BackoffRate": 1.5
+        }
+      ],
+      "ResultPath": null,
+      "Next": "BQ2_Flagged_HI2"
+    },
+    "BQ2_Flagged_HI2": {
+      "Type": "Task",
+      "Comment": "Role 6: trade-off stage 1: HI pairs (create)",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "-- bq2 lift flagged_hi2\nCREATE TABLE is459_g2t1_aml.bq2_tradeoff_flagged\nWITH (\n  format = 'PARQUET',\n  external_location = 's3://is459-g2t1-aml-processed-bucket/bq2_tradeoff_flagged/'\n) AS\nWITH ranks AS (\n  SELECT min_support, method_sequence, MIN(risk_rank) AS risk_rank\n  FROM is459_g2t1_aml.bq2_lift\n  WHERE dataset = 'HI-Medium' AND sequence_length = 2 AND risk_rank <= 10\n  GROUP BY min_support, method_sequence\n), patterns AS (\n  SELECT DISTINCT method_sequence FROM ranks\n), matched AS (\n  SELECT DISTINCT s.method_sequence, s.final_txn_id\n  FROM is459_g2t1_aml.bq2_sequences s\n  JOIN patterns p ON p.method_sequence = s.method_sequence\n  WHERE s.dataset = 'HI-Medium' AND s.sequence_length = 2\n)\nSELECT 'HI-Medium' AS dataset, CAST(2 AS integer) AS sequence_length, r.min_support,\n       m.final_txn_id, MIN(r.risk_rank) AS best_rank\nFROM matched m JOIN ranks r ON r.method_sequence = m.method_sequence\nGROUP BY r.min_support, m.final_txn_id",
+        "WorkGroup": "primary",
+        "QueryExecutionContext": {
+          "Database": "is459_g2t1_aml"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Athena.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 6,
+          "BackoffRate": 1.5
+        }
+      ],
+      "ResultPath": null,
+      "Next": "BQ2_Flagged_HI3"
+    },
+    "BQ2_Flagged_HI3": {
+      "Type": "Task",
+      "Comment": "Role 6: trade-off stage 1: HI triples",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "-- bq2 lift flagged_hi3\nINSERT INTO is459_g2t1_aml.bq2_tradeoff_flagged\nWITH ranks AS (\n  SELECT min_support, method_sequence, MIN(risk_rank) AS risk_rank\n  FROM is459_g2t1_aml.bq2_lift\n  WHERE dataset = 'HI-Medium' AND sequence_length = 3 AND risk_rank <= 10\n  GROUP BY min_support, method_sequence\n), patterns AS (\n  SELECT DISTINCT method_sequence FROM ranks\n), matched AS (\n  SELECT DISTINCT s.method_sequence, s.final_txn_id\n  FROM is459_g2t1_aml.bq2_sequences s\n  JOIN patterns p ON p.method_sequence = s.method_sequence\n  WHERE s.dataset = 'HI-Medium' AND s.sequence_length = 3\n)\nSELECT 'HI-Medium' AS dataset, CAST(3 AS integer) AS sequence_length, r.min_support,\n       m.final_txn_id, MIN(r.risk_rank) AS best_rank\nFROM matched m JOIN ranks r ON r.method_sequence = m.method_sequence\nGROUP BY r.min_support, m.final_txn_id",
+        "WorkGroup": "primary",
+        "QueryExecutionContext": {
+          "Database": "is459_g2t1_aml"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Athena.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 6,
+          "BackoffRate": 1.5
+        }
+      ],
+      "ResultPath": null,
+      "Next": "BQ2_Flagged_LI2"
+    },
+    "BQ2_Flagged_LI2": {
+      "Type": "Task",
+      "Comment": "Role 6: trade-off stage 1: LI pairs",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "-- bq2 lift flagged_li2\nINSERT INTO is459_g2t1_aml.bq2_tradeoff_flagged\nWITH ranks AS (\n  SELECT min_support, method_sequence, MIN(risk_rank) AS risk_rank\n  FROM is459_g2t1_aml.bq2_lift\n  WHERE dataset = 'HI-Medium' AND sequence_length = 2 AND risk_rank <= 10\n  GROUP BY min_support, method_sequence\n), patterns AS (\n  SELECT DISTINCT method_sequence FROM ranks\n), matched AS (\n  SELECT DISTINCT s.method_sequence, s.final_txn_id\n  FROM is459_g2t1_aml.bq2_sequences s\n  JOIN patterns p ON p.method_sequence = s.method_sequence\n  WHERE s.dataset = 'LI-Medium' AND s.sequence_length = 2\n)\nSELECT 'LI-Medium' AS dataset, CAST(2 AS integer) AS sequence_length, r.min_support,\n       m.final_txn_id, MIN(r.risk_rank) AS best_rank\nFROM matched m JOIN ranks r ON r.method_sequence = m.method_sequence\nGROUP BY r.min_support, m.final_txn_id",
+        "WorkGroup": "primary",
+        "QueryExecutionContext": {
+          "Database": "is459_g2t1_aml"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Athena.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 6,
+          "BackoffRate": 1.5
+        }
+      ],
+      "ResultPath": null,
+      "Next": "BQ2_Flagged_LI3"
+    },
+    "BQ2_Flagged_LI3": {
+      "Type": "Task",
+      "Comment": "Role 6: trade-off stage 1: LI triples",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "-- bq2 lift flagged_li3\nINSERT INTO is459_g2t1_aml.bq2_tradeoff_flagged\nWITH ranks AS (\n  SELECT min_support, method_sequence, MIN(risk_rank) AS risk_rank\n  FROM is459_g2t1_aml.bq2_lift\n  WHERE dataset = 'HI-Medium' AND sequence_length = 3 AND risk_rank <= 10\n  GROUP BY min_support, method_sequence\n), patterns AS (\n  SELECT DISTINCT method_sequence FROM ranks\n), matched AS (\n  SELECT DISTINCT s.method_sequence, s.final_txn_id\n  FROM is459_g2t1_aml.bq2_sequences s\n  JOIN patterns p ON p.method_sequence = s.method_sequence\n  WHERE s.dataset = 'LI-Medium' AND s.sequence_length = 3\n)\nSELECT 'LI-Medium' AS dataset, CAST(3 AS integer) AS sequence_length, r.min_support,\n       m.final_txn_id, MIN(r.risk_rank) AS best_rank\nFROM matched m JOIN ranks r ON r.method_sequence = m.method_sequence\nGROUP BY r.min_support, m.final_txn_id",
+        "WorkGroup": "primary",
+        "QueryExecutionContext": {
+          "Database": "is459_g2t1_aml"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Athena.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 6,
+          "BackoffRate": 1.5
+        }
+      ],
+      "ResultPath": null,
+      "Next": "BQ2_Tradeoff"
+    },
+    "BQ2_Tradeoff": {
+      "Type": "Task",
+      "Comment": "Role 6: trade-off stage 2",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "-- bq2 lift tradeoff\nCREATE TABLE is459_g2t1_aml.bq2_tradeoff\nWITH (\n  format = 'PARQUET',\n  external_location = 's3://is459-g2t1-aml-processed-bucket/bq2_tradeoff/'\n) AS\nWITH policies (policy, top_n) AS (\n  VALUES ('Targeted top-3', 3), ('Targeted top-5', 5),\n         ('Targeted top-10', 10), ('Broad: review all', 0)\n), lengths (sequence_length) AS (VALUES (2), (3)),\ncutoffs (min_support) AS (VALUES (50), (100), (500)),\nselected AS (\n  SELECT p.policy, p.top_n, l.min_support, l.method_sequence, l.sequence_length\n  FROM policies p JOIN is459_g2t1_aml.bq2_lift l\n    ON l.dataset = 'HI-Medium' AND l.risk_rank <= p.top_n\n), selected_counts AS (\n  SELECT policy, sequence_length, min_support, COUNT(*) AS actual_patterns\n  FROM selected GROUP BY policy, sequence_length, min_support\n), flagged AS (\n  SELECT dataset, sequence_length, min_support, final_txn_id, MIN(best_rank) AS best_rank\n  FROM is459_g2t1_aml.bq2_tradeoff_flagged\n  GROUP BY dataset, sequence_length, min_support, final_txn_id\n), by_rank AS (\n  SELECT f.dataset, f.sequence_length, f.min_support, f.best_rank,\n         COUNT(*) AS n, SUM(t.is_laundering) AS n_laundering, SUM(1 - t.is_laundering) AS n_legitimate\n  FROM flagged f JOIN is459_g2t1_aml.transactions_clean t\n    ON t.dataset = f.dataset AND t.txn_id = f.final_txn_id\n  WHERE t.dataset IN ('HI-Medium', 'LI-Medium')\n  GROUP BY f.dataset, f.sequence_length, f.min_support, f.best_rank\n), reviewed AS (\n  SELECT b.dataset, p.policy, b.sequence_length, b.min_support,\n         SUM(b.n) AS reviewed, SUM(b.n_laundering) AS laundering_flagged,\n         SUM(b.n_legitimate) AS legitimate_reviewed\n  FROM by_rank b JOIN policies p ON p.top_n > 0 AND b.best_rank <= p.top_n\n  GROUP BY b.dataset, p.policy, b.sequence_length, b.min_support\n), population AS (\n  SELECT dataset, COUNT(*) AS total_transactions,\n         SUM(is_laundering) AS total_laundering,\n         SUM(1 - is_laundering) AS total_legitimate\n  FROM is459_g2t1_aml.transactions_clean\n  WHERE dataset IN ('HI-Medium', 'LI-Medium') GROUP BY dataset\n), measured AS (\n  SELECT t.*, p.policy, p.top_n, l.sequence_length, k.min_support,\n         COALESCE(c.actual_patterns, 0) AS actual_patterns,\n         CASE WHEN p.top_n = 0 THEN t.total_transactions ELSE COALESCE(r.reviewed, 0) END AS reviewed,\n         CASE WHEN p.top_n = 0 THEN t.total_laundering ELSE COALESCE(r.laundering_flagged, 0) END AS laundering_flagged,\n         CASE WHEN p.top_n = 0 THEN t.total_legitimate ELSE COALESCE(r.legitimate_reviewed, 0) END AS legitimate_reviewed\n  FROM population t CROSS JOIN policies p CROSS JOIN lengths l CROSS JOIN cutoffs k\n  LEFT JOIN reviewed r ON r.dataset = t.dataset AND r.policy = p.policy\n    AND r.sequence_length = l.sequence_length AND r.min_support = k.min_support\n  LEFT JOIN selected_counts c ON c.policy = p.policy\n    AND c.sequence_length = l.sequence_length AND c.min_support = k.min_support\n)\nSELECT *,\n       CAST(laundering_flagged AS DOUBLE) / NULLIF(total_laundering, 0) AS laundering_catch_rate,\n       CAST(legitimate_reviewed AS DOUBLE) / NULLIF(total_legitimate, 0) AS legitimate_review_rate,\n       CAST(reviewed AS DOUBLE) / total_transactions AS review_share,\n       CAST(laundering_flagged AS DOUBLE) / NULLIF(reviewed, 0) AS review_precision\nFROM measured",
+        "WorkGroup": "primary",
+        "QueryExecutionContext": {
+          "Database": "is459_g2t1_aml"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Athena.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 6,
+          "BackoffRate": 1.5
+        }
+      ],
+      "ResultPath": null,
+      "Next": "BQ2_Robustness"
+    },
+    "BQ2_Robustness": {
+      "Type": "Task",
+      "Comment": "Role 6: LI robustness",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "-- bq2 lift robustness\nCREATE TABLE is459_g2t1_aml.bq2_robustness\nWITH (\n  format = 'PARQUET',\n  external_location = 's3://is459-g2t1-aml-processed-bucket/bq2_robustness/'\n) AS\nSELECT hi.method_sequence, hi.sequence_length, hi.min_support, hi.risk_rank AS hi_rank,\n       hi.support_count AS hi_support, hi.lift AS hi_lift,\n       COALESCE(li.support_count, 0) AS li_support,\n       COALESCE(li.laundering_count, 0) AS li_laundering_count,\n       li.laundering_rate AS li_laundering_rate, li.lift AS li_lift,\n       li.risk_rank AS li_rank,\n       CASE WHEN li.method_sequence IS NULL THEN 'Absent on LI'\n            WHEN li.eligible = 0 THEN 'Below LI support cutoff'\n            WHEN li.lift IS NULL THEN 'LI baseline has no laundering'\n            ELSE 'Supported on LI' END AS li_status\nFROM is459_g2t1_aml.bq2_lift hi\nLEFT JOIN is459_g2t1_aml.bq2_lift li\n  ON li.dataset = 'LI-Medium' AND li.method_sequence = hi.method_sequence\n     AND li.sequence_length = hi.sequence_length AND li.min_support = hi.min_support\nWHERE hi.dataset = 'HI-Medium' AND hi.risk_rank <= 10",
+        "WorkGroup": "primary",
+        "QueryExecutionContext": {
+          "Database": "is459_g2t1_aml"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Athena.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 6,
+          "BackoffRate": 1.5
+        }
+      ],
+      "ResultPath": null,
+      "Next": "BQ2_Sankey"
+    },
+    "BQ2_Sankey": {
+      "Type": "Task",
+      "Comment": "Role 6: Sankey",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "-- bq2 lift sankey\nCREATE TABLE is459_g2t1_aml.bq2_sankey\nWITH (\n  format = 'PARQUET',\n  external_location = 's3://is459-g2t1-aml-processed-bucket/bq2_sankey/'\n) AS\nSELECT dataset, method_sequence, sequence_length,\n       split_part(method_sequence, ' -> ', 1) AS method_1,\n       split_part(method_sequence, ' -> ', 2) AS method_2,\n       CASE WHEN sequence_length = 3\n         THEN split_part(method_sequence, ' -> ', 3) END AS method_3,\n       support_count AS sequence_count,\n       laundering_count AS laundering_sequence_count,\n       support_count - laundering_count AS legitimate_sequence_count\nFROM is459_g2t1_aml.bq2_lift\nWHERE min_support = 50",
+        "WorkGroup": "primary",
+        "QueryExecutionContext": {
+          "Database": "is459_g2t1_aml"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Athena.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 6,
+          "BackoffRate": 1.5
+        }
+      ],
+      "ResultPath": null,
+      "Next": "BQ2_Lift_Check"
+    },
+    "BQ2_Lift_Check": {
+      "Type": "Task",
+      "Comment": "Gate: lift, trade-off, robustness and Sankey reconcile with bq2_sequences",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "-- bq2 gate lift outputs\n-- Run by Step Functions after the Role 6 tables are rebuilt. One row; ok must be 'true'.\n-- Every count below must be 0 (or match), otherwise the run fails with this row as the cause.\n-- flagged_groups = expected_flagged_groups: every (dataset, length, support) group whose HI top-10\n-- patterns occur in that dataset has trade-off stage 1 rows (a missing group = a statement wrote nothing).\nWITH seq AS (\n  SELECT dataset, sequence_length, COUNT(*) AS n, SUM(any_laundering) AS l\n  FROM is459_g2t1_aml.bq2_sequences\n  WHERE dataset IN ('HI-Medium', 'LI-Medium')\n  GROUP BY dataset, sequence_length\n), lift_totals AS (\n  SELECT dataset, sequence_length, min_support,\n         SUM(support_count) AS n, SUM(laundering_count) AS l,\n         COUNT(risk_rank) - COUNT(DISTINCT risk_rank) AS dup_ranks\n  FROM is459_g2t1_aml.bq2_lift\n  GROUP BY dataset, sequence_length, min_support\n), lift_check AS (\n  SELECT\n    (SELECT COUNT(*) FROM seq) AS sequence_groups,\n    COUNT(*) AS lift_groups,\n    COUNT_IF(s.n IS NULL OR s.n <> t.n OR s.l <> t.l) AS lift_support_mismatches,\n    COALESCE(SUM(t.dup_ranks), 0) AS lift_duplicate_ranks\n  FROM lift_totals t LEFT JOIN seq s\n    ON s.dataset = t.dataset AND s.sequence_length = t.sequence_length\n), flagged_check AS (\n  SELECT COUNT(*) AS flagged_rows,\n         (SELECT COUNT(*) FROM (\n            SELECT DISTINCT dataset, sequence_length, min_support\n            FROM is459_g2t1_aml.bq2_tradeoff_flagged) g) AS flagged_groups,\n         (SELECT COUNT(*) FROM (\n            SELECT DISTINCT d.dataset, h.sequence_length, h.min_support\n            FROM is459_g2t1_aml.bq2_lift h\n            JOIN is459_g2t1_aml.bq2_lift d\n              ON d.method_sequence = h.method_sequence AND d.sequence_length = h.sequence_length\n             AND d.min_support = h.min_support\n            WHERE h.dataset = 'HI-Medium' AND h.risk_rank <= 10 AND d.support_count > 0) e) AS expected_flagged_groups,\n         (SELECT COUNT(*) FROM (\n            SELECT 1 FROM is459_g2t1_aml.bq2_tradeoff_flagged\n            GROUP BY dataset, sequence_length, min_support, final_txn_id HAVING COUNT(*) > 1) d) AS flagged_duplicates,\n         COUNT_IF(best_rank IS NULL OR best_rank NOT BETWEEN 1 AND 10) AS flagged_bad_ranks\n  FROM is459_g2t1_aml.bq2_tradeoff_flagged\n), tradeoff_check AS (\n  SELECT COUNT(*) AS tradeoff_rows,\n         COUNT_IF(reviewed <> laundering_flagged + legitimate_reviewed\n                  OR reviewed > total_transactions\n                  OR laundering_flagged > total_laundering) AS tradeoff_accounting_errors\n  FROM is459_g2t1_aml.bq2_tradeoff\n), robustness_check AS (\n  SELECT COUNT(*) AS robustness_rows,\n         (SELECT COUNT(*) FROM is459_g2t1_aml.bq2_lift\n          WHERE dataset = 'HI-Medium' AND risk_rank <= 10) AS hi_top10_rows\n  FROM is459_g2t1_aml.bq2_robustness\n), sankey_check AS (\n  SELECT COUNT_IF(s.n IS NULL OR s.n <> k.n OR s.l <> k.l) AS sankey_mismatches,\n         COUNT(*) AS sankey_groups\n  FROM (SELECT dataset, sequence_length, SUM(sequence_count) AS n, SUM(laundering_sequence_count) AS l\n        FROM is459_g2t1_aml.bq2_sankey GROUP BY dataset, sequence_length) k\n  LEFT JOIN seq s ON s.dataset = k.dataset AND s.sequence_length = k.sequence_length\n)\nSELECT CASE WHEN c.sequence_groups = 4\n             AND c.lift_groups = 12\n             AND c.lift_support_mismatches = 0\n             AND c.lift_duplicate_ranks = 0\n             AND f.expected_flagged_groups > 0 AND f.flagged_groups = f.expected_flagged_groups AND f.flagged_duplicates = 0 AND f.flagged_bad_ranks = 0\n             AND t.tradeoff_rows = 48 AND t.tradeoff_accounting_errors = 0\n             AND r.robustness_rows = r.hi_top10_rows AND r.robustness_rows > 0\n             AND k.sankey_groups = 4 AND k.sankey_mismatches = 0\n            THEN 'true' ELSE 'false' END AS ok,\n       c.*, f.*, t.*, r.*, k.*\nFROM lift_check c CROSS JOIN flagged_check f CROSS JOIN tradeoff_check t\n     CROSS JOIN robustness_check r CROSS JOIN sankey_check k",
+        "WorkGroup": "primary",
+        "QueryExecutionContext": {
+          "Database": "is459_g2t1_aml"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://is459-g2t1-aml-athena-bucket/results/"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Athena.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 6,
+          "BackoffRate": 1.5
+        }
+      ],
+      "ResultPath": "$.lift.checkq",
+      "Next": "BQ2_Lift_Check_Result",
+      "ResultSelector": {
+        "qid.$": "$.QueryExecution.QueryExecutionId"
+      }
+    },
+    "BQ2_Lift_Check_Result": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::athena:getQueryResults",
+      "Parameters": {
+        "QueryExecutionId.$": "$.lift.checkq.qid"
+      },
+      "ResultSelector": {
+        "ok.$": "$.ResultSet.Rows[1].Data[0].VarCharValue",
+        "row.$": "$.ResultSet.Rows[1].Data"
+      },
+      "ResultPath": "$.lift.check",
+      "Next": "BQ2_Lift_Check_Ok?"
+    },
+    "BQ2_Lift_Check_Ok?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.lift.check.ok",
+          "StringEquals": "true",
+          "Next": "BQ2_Lift_Done"
+        }
+      ],
+      "Default": "BQ2_LiftCheckFailed"
+    },
+    "BQ2_LiftCheckFailed": {
+      "Type": "Fail",
+      "Error": "LiftCheckFailed",
+      "CausePath": "States.JsonToString($.lift.check.row)"
+    },
+    "BQ2_Lift_Done": {
+      "Type": "Pass",
+      "Comment": "Role 6 outputs rebuilt and checked",
+      "Parameters": {
+        "lift_check.$": "$.lift.check.ok"
+      },
+      "ResultPath": "$.lift",
+      "End": true
+    }
+  }
+}
