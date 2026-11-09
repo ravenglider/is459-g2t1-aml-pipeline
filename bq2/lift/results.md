@@ -242,3 +242,13 @@ HI pair leader is ACH -> ACH (lift 8.5131); HI triple leader is ACH -> Cash -> A
 ## Final robustness Tableau evidence — 9 November 2026
 
 Final dashboard screenshots [pairs](../../viz/screenshots/35-final-robustness-pairs.png) and [triples](../../viz/screenshots/36-final-robustness-triples.png) show the correct ten HI-selected patterns per length, support-100 scope and matching HI/LI ranks, supports and rounded lift values. Both filter states are captured and the overall 10/10 pair and 8/10 triple summary is accurate. This verifies visible output; native workbook save/reopen and credential-free delivery are not yet independently checked.
+
+
+## Final HI dashboard captures — 9 November 2026
+
+Screenshots [37 pairs](../../viz/screenshots/37-final-hi-dashboard-pairs.png) and [38 triples](../../viz/screenshots/38-final-hi-dashboard-triples.png) show final HI rankings, Sankeys, trade-off policies and targeted checklists. Visible rates and ranking values match validated final exports. Pairs top-5 catches 28.29% with 15.19% legitimate review; triples top-5 catches 19.95% with 2.16% legitimate review. Triple screenshot still has ###### in three ranked Support Count cells and the top-5 checklist fifth row is outside the visible scroll region. Correct these before final presentation capture. Native-workbook reopen/interactivity verification remains pending; not inferred from screenshots.
+
+
+## Completed final dashboard checks — 9 November 2026
+
+Replaced screenshot 38 with Xiang Ying's corrected Desktop image (byte-for-byte; original retained). All ranked support counts and five selected checklist rows are visible, resolving the previous layout defects. Visible HI triple rates and pattern values match the validated final export. Xiang Ying confirms that saving, closing and reopening loads all three dashboards correctly; this is user-reported native-app acceptance, not assistant inspection of a delivered workbook. The README now records current dashboard checks separately from historical progress. Credential-free native workbook delivery and automation handoff remain pending.

@@ -1,12 +1,12 @@
 # BQ2 analytics and targeting (Role 6)
 
-Owner: Xiang Ying. Status: cleaned schema and HI/LI baselines verified from Xiang Ying's console results; screenshots saved. Ji Ning reports the sample development partition published and accepted; Role 6 integration checks can begin. Full HI/LI findings remain pending.
+Owner: Xiang Ying. Status (9 November 2026): final Athena analytics and three Tableau dashboards completed and checked. Xiang Ying confirms all three dashboards load correctly after saving, closing and reopening. Credential-free native workbook delivery and automation handoff remain pending.
 
 ## What it does
 
 Ranks payment-method sequences by laundering lift, compares top-3/5/10 rules with reviewing all transactions, and evaluates frozen HI rules on LI-Medium. Outputs support the ranked table, Sankey, trade-off chart and targeted checklist promised on proposal pages 8–9.
 
-**Start now with the [accepted-sample development runbook](development/README.md).** Earlier source checks are in the [baseline walkthrough](start_now.md). The [Role 6 guide](role6_guide.md) explains the metric choices. [Input contract](input_contract.md) maps Ji Ning's documented 21-column v1 schema to this implementation; the actual development output is still pending verification.
+Final execution and findings are recorded in [results](results.md). The [sample development runbook](development/README.md) and [baseline walkthrough](start_now.md) retain earlier checks. The [Role 6 guide](role6_guide.md) explains the metrics, and the [input contract](input_contract.md) documents the 21-column sequence interface.
 
 ## AWS resources
 
@@ -23,7 +23,21 @@ Existing resources: region `us-east-1`, database `is459_g2t1_aml`, Athena workgr
 
 All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-g2t1-aml-processed-bucket/`. Input locations: [input_contract.md](input_contract.md).
 
-## Current progress
+## Completed dashboard checks
+
+- Final HI pairs and triples dashboards use separate Athena aggregate sources: bq2_lift, bq2_tradeoff and bq2_sankey. The robustness dashboard uses bq2_robustness.
+- HI worksheets retain dataset=HI-Medium and their fixed sequence lengths (2 or 3). Lift, trade-off and robustness sources use min_support=100; Sankey reads one complete set of sequence counts.
+- Ranked leaders, trade-off rates and robustness values match the validated exports. Sankey positive occurrence totals reconcile to 1,274,451 HI pairs and 2,344,593 HI triples.
+- Final [pairs dashboard](../../viz/screenshots/37-final-hi-dashboard-pairs.png) and corrected [triples dashboard](../../viz/screenshots/38-final-hi-dashboard-triples.png) captured; triples support counts and all five selected checklist rows are visible.
+- Robustness filter states [2](../../viz/screenshots/35-final-robustness-pairs.png) and [3](../../viz/screenshots/36-final-robustness-triples.png) captured. LI lift remains above 1 for 10/10 HI-selected pairs and 8/10 triples.
+- Count/rate formatting, final-data labels and tooltip population notes reviewed. Some dashboard headings are abbreviated and small Sankey nodes have no visible labels.
+- Xiang Ying confirms save/close/reopen succeeded for all three dashboards. This is user-reported native-app acceptance; the final workbook file has not yet been inspected by the assistant.
+
+Remaining: credential-free native workbook packaging/delivery and the validated two-stage SQL handoff for Sonia's automation. No deployment is claimed.
+
+## Earlier progress log
+
+The dated history below records what was pending at each earlier stage; the completed checks above are the current status.
 
 - Implemented: v1 interface alignment, separate dataset/length lift, 50/100/500 support policies, distinct-final targeting, frozen-rule LI checks and nonduplicated Sankey counts.
 - Twelve local analytical SQL regression tests pass; Athena array/lineage validation and actual integration are not yet executed.
@@ -114,3 +128,5 @@ Final Sankey CSV validated: 522 unique rows, correct ordered method fields and r
 All four final support-100 CSV exports have now been checked: lift, trade-off, robustness and Sankey. Lift rankings/formulas and the cross-export comparisons passed. Final Tableau updates, packaging and automation handoff remain pending.
 
 Final Tableau HI–LI robustness dashboard captured for [pairs](../../viz/screenshots/35-final-robustness-pairs.png) and [triples](../../viz/screenshots/36-final-robustness-triples.png). Visible values match the checked export. Final HI dashboard screenshots, native workbook save/reopen verification and automation handoff remain pending.
+
+Final HI [pairs](../../viz/screenshots/37-final-hi-dashboard-pairs.png) and [triples](../../viz/screenshots/38-final-hi-dashboard-triples.png) dashboards captured. The corrected triples capture resolves Support Count widths and checklist visibility. Xiang Ying confirms save/reopen passed; native-workbook inspection/delivery and automation handoff remain pending.

@@ -35,3 +35,13 @@ The following final-data screenshots are separate from the sample evidence above
 - [36: selected triples](36-final-robustness-triples.png): ten frozen HI-ranked triple patterns at the same cutoff. Eight retain LI lift above 1; ACH -> ACH -> Cheque (0.99) and ACH -> ACH -> Cash (0.92) fall below the LI baseline.
 
 Visible ranks, supports and rounded lifts match the validated final robustness CSV. The caption correctly uses each datasets own sequence baseline. Above-baseline lift is a descriptive comparison, not statistical significance or production validation. Both dropdown states are evidenced by screenshots; save/reopen acceptance of the native workbook remains pending. Images copied byte-for-byte from Desktop; originals retained.
+
+
+## Final HI dashboards — 9 November 2026
+
+- [37: HI pairs dashboard](37-final-hi-dashboard-pairs.png): final pair rankings, positive-sequence Sankey, distinct-final-transaction trade-offs and top-5 checklist. Visible values match validated final HI exports.
+- [38: HI triples dashboard](38-final-hi-dashboard-triples.png): final triple rankings, positive-sequence Sankey, distinct-final-transaction trade-offs and a top-5 checklist control. Corrected capture: visible values match checked exports, all ranked Support Count cells are readable and all five selected checklist rows are visible. Supersedes the earlier clipped capture.
+
+Both images copied byte-for-byte from Desktop; originals retained. Some table headings are truncated and small Sankey nodes lack labels. Xiang Ying subsequently confirms saving, closing and reopening successfully loaded all three dashboards. This is user-reported native-app acceptance; the workbook file remains uninspected.
+
+Final dashboard checks completed: HI scope and sequence lengths, support-100 policy sources, validated rates/rankings, both robustness filter states, corrected triples counts/checklist visibility, and user-confirmed save/reopen. Final native workbook packaging and automation handoff remain separate.
