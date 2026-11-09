@@ -83,3 +83,5 @@ Sample Tableau progress (8 November 2026): base worksheets and combined pairs/tr
 
 
 Final input check (9 November 2026): 21-column schema is compatible. The published bq2_sequences name is a view over partitioned bq2_sequences_a; the initial SHOW PARTITIONS error was against the view, not a storage failure. Physical partition listing succeeded (screenshot 24). Exact date-coverage summary and final acceptance evidence remain to be confirmed; see [results](results.md#final-publication-view-and-underlying-partitions--9-november-2026).
+
+Final date coverage (9 November 2026): metadata confirms HI 28/28 expected dates. LI has 25 dates ending September 25; September 26/27 need owner confirmation as validated empty outputs or pending publication. Full-scope LI completeness is not yet established; retain the full agreed cleaned-source denominator. Screenshot 25 and details are in [results](results.md#final-partition-coverage-discrepancy--9-november-2026).
