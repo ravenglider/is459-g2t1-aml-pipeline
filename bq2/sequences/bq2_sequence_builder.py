@@ -78,9 +78,20 @@ def build_two_hop_links(transactions: DataFrame, *, first_dates=None) -> DataFra
     remain available. Omission preserves the original unrestricted behavior.
     """
     validate_transactions(transactions)
+    return _build_two_hop_links_validated(transactions, first_dates=first_dates)
+
+
+def _build_two_hop_links_validated(transactions, *, first_dates=None, first_txn_ids=None, second_txn_ids=None, _hourly=False):
+    """Full-data internal path: caller MUST validate the complete source first.
+
+    Identity selectors restrict both join sides before expansion. Public sample
+    calls still validate and use precisely the same predicate below.
+    """
     columns = ["dataset", "txn_id", "txn_ts", "from_bank", "from_account",
                "to_bank", "to_account"]
-    source = transactions.select(*columns).withColumn("_bucket", _timestamp_bucket(F.col("txn_ts")))
+    bucket=(_timestamp_bucket(F.col("txn_ts")) if not _hourly else
+        F.floor(F.col("txn_ts").cast("bigint").cast("decimal(20,0)")/F.lit(3600)).cast("bigint"))
+    source = transactions.select(*columns).withColumn("_bucket", bucket)
     preceding = source
     if first_dates is not None:
         from sequence_processing import _iso_date
@@ -88,22 +99,49 @@ def build_two_hop_links(transactions: DataFrame, *, first_dates=None) -> DataFra
             raise ValueError("first_dates must be an iterable of date strings")
         dates = [_iso_date(d, "first_dates").isoformat() for d in first_dates]
         preceding = source.where(F.date_format("txn_ts", "yyyy-MM-dd").isin(dates))
-    a = preceding.alias("a")
-    b = source.alias("b")
+    if first_txn_ids is not None:
+        _require_columns(first_txn_ids, {"dataset": StringType(), "txn_id": LongType()})
+        preceding = preceding.join(first_txn_ids, ["dataset", "txn_id"], "left_semi")
+    following = source
+    if second_txn_ids is not None:
+        _require_columns(second_txn_ids, {"dataset": StringType(), "txn_id": LongType()})
+        following = following.join(second_txn_ids, ["dataset", "txn_id"], "left_semi")
+    if _hourly:
+        # Full-data only: explicit target-hour equality gives Spark a time join
+        # key. Exact timestamps below still enforce the inclusive 24-hour rule.
+        preceding=preceding.withColumn("_target_bucket",F.explode(F.sequence(F.col("_bucket"),F.col("_bucket")+24)))
+        # Restrict the right side to reached bank/account/hour keys as well.
+        # Its matched row count is then bounded by the measured candidates.
+        keys=preceding.select("dataset",F.col("to_bank").alias("from_bank"),
+            F.col("to_account").alias("from_account"),F.col("_target_bucket").alias("_bucket"))
+        following=following.join(keys,["dataset","from_bank","from_account","_bucket"],"left_semi")
+    if _hourly:
+        # The right semi-join contains the left branch's lineage. Avoid relying
+        # on a/b qualifiers there (the live failure could not resolve a.dataset).
+        # Fresh, disjoint names remove attribute reuse at the final join.
+        a=preceding.select(*[F.col(n).alias("_r5_first_"+n) for n in preceding.columns])
+        b=following.select(*[F.col(n).alias("_r5_second_"+n) for n in following.columns])
+        first=lambda n:F.col("_r5_first_"+n)
+        second=lambda n:F.col("_r5_second_"+n)
+    else:
+        a = preceding.alias("a")
+        b = following.alias("b")
+        first=lambda n:F.col("a."+n)
+        second=lambda n:F.col("b."+n)
     condition = (
-        (F.col("a.dataset") == F.col("b.dataset"))
-        & (F.col("a.to_bank") == F.col("b.from_bank"))
-        & (F.col("a.to_account") == F.col("b.from_account"))
-        & (F.col("a.txn_id") != F.col("b.txn_id"))
-        & ((F.col("b._bucket") == F.col("a._bucket"))
-           | (F.col("b._bucket") == F.col("a._bucket") + 1))
-        & (F.col("b.txn_ts") > F.col("a.txn_ts"))
-        & (F.col("b.txn_ts") <= F.col("a.txn_ts") + F.expr("INTERVAL 24 HOURS"))
+        (first("dataset") == second("dataset"))
+        & (first("to_bank") == second("from_bank"))
+        & (first("to_account") == second("from_account"))
+        & (first("txn_id") != second("txn_id"))
+        & ((second("_bucket")==first("_target_bucket")) if _hourly else
+           ((second("_bucket") == first("_bucket")) | (second("_bucket") == first("_bucket") + 1)))
+        & (second("txn_ts") > first("txn_ts"))
+        & (second("txn_ts") <= first("txn_ts") + F.expr("INTERVAL 24 HOURS"))
     )
     return (a.join(b, condition, "inner")
-            .select(F.col("a.dataset").alias("dataset"),
-                    F.col("a.txn_id").alias("first_txn_id"),
-                    F.col("b.txn_id").alias("second_txn_id"))
+            .select(first("dataset").alias("dataset"),
+                    first("txn_id").alias("first_txn_id"),
+                    second("txn_id").alias("second_txn_id"))
             .dropDuplicates(["dataset", "first_txn_id", "second_txn_id"]))
 
 

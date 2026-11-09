@@ -9,13 +9,14 @@ from package_glue_modules import GENERATION_MODULES
 FULL_MODULES = GENERATION_MODULES + (
     "glue_sample_generation.py", "sequence_full_source.py",
     "sequence_full_staging.py", "sequence_full_generation.py",
+    "sequence_full_publication.py",
 )
 
 
 def build_full_package(destination):
     root = Path(__file__).resolve().parent
-    if len(FULL_MODULES) != 17 or len(set(FULL_MODULES)) != 17:
-        raise ValueError("Expected exactly 17 full-generation modules")
+    if len(FULL_MODULES) != 18 or len(set(FULL_MODULES)) != 18:
+        raise ValueError("Expected exactly 18 full-pipeline modules")
     destination = Path(destination)
     if destination.suffix != ".zip" or destination.is_symlink():
         raise ValueError("Fresh ZIP file required")

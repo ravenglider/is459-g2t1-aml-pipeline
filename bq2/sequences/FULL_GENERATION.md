@@ -1,10 +1,11 @@
 # Full HI/LI generation: local implementation and publication boundary
 
-This increment generates and validates **staging only**. It does not publish
-`bq2_sequences`, replace an existing dataset, or update Glue Catalog tables.
-Those parts of Sonia's final single-job contract are still required. No new
-AWS deployment, permissions, runtime, growth threshold or full output count is
-claimed here. The accepted sample development workflow remains unchanged.
+The integrated entrypoint now generates, validates, copies an immutable production
+version, updates the selected dataset's Catalog partitions and verifies publication.
+All implementation testing is local: no production deployment, effective cloud
+permissions, full-data runtime/growth or AWS publication success is claimed.
+The accepted sample development workflow remains unchanged. See
+[production publication and recovery](FULL_PUBLICATION.md) before deployment.
 
 ## Fixed source scope
 
@@ -31,9 +32,12 @@ real-world payment activity ended.
 - `sequence_full_staging.py`: exclusive run/attempt reservation, per-date
   Snappy Parquet, existing physical-schema/compression/read-back validators,
   conditional receipts, explicit empty outputs and retained failures.
-- `glue_full_generation.py`: reusable HI/LI CLI and injected coordinator;
-  uses the existing approved runtime/SDK capability gates before staging writes.
-- `package_full_generation.py`: separate deterministic flat 17-module ZIP.
+- `sequence_full_publication.py`: fixed production table/schema, conditional
+  copies/receipts, table-wide publication ownership, selected-dataset Catalog
+  actions, independent read-back and explicit recovery.
+- `glue_full_generation.py`: reusable HI/LI CLI coordinating generation through
+  independently verified publication, with runtime/SDK checks before writes.
+- `package_full_generation.py`: separate deterministic flat 18-module ZIP.
   Entry script is separate; the existing 13-module/sample and nine-module
   preflight packaging profiles are unchanged. SDK wheels remain separate.
 
@@ -72,6 +76,11 @@ Required arguments:
 --MAX_RECORDS_PER_FILE             positive explicit file-sizing limit
 --MAX_RUN_SECONDS                  positive cooperative elapsed-time budget
 --ALLOW_AWS_WRITES                 literal true; otherwise no runtime initialization
+--ALLOW_PUBLICATION                literal true; otherwise no runtime initialization
+--READERS_PAUSED                   literal true; coordinated table-wide pause
+--PUBLICATION_MAINTENANCE_EVIDENCE  owner/reader-pause coordination reference
+--MAX_COPY_BYTES                   positive maximum per-file in-memory transfer size
+--RESUME_PUBLICATION               optional false/true; explicit SAME-attempt recovery
 ```
 
 No sample thresholds or production defaults are supplied. Fresh full fingerprints
@@ -128,26 +137,29 @@ diagnosis; use a fresh attempt after review. No overwrite, deletion, blind retry
 or stale-owner takeover exists. If writing FAILED also fails, preserve the
 original exception and attach a note. An uncertain terminal write is not success.
 
-## Work still required for the final single Glue job
+## Deployment prerequisites still required
 
-1. Obtain fresh frozen HI/LI inventories and global ID validation; profile growth
-   before setting reviewed full-data limits. Sample counts are not estimates for HI.
-2. Review/package a new full release and configure the reusable job; no release
-   assembler extension or cloud execution was performed in this increment.
-3. Add an explicit publication adapter after generation returns: verify run and
-   batch receipts, stage/copy a version, replace only the selected dataset,
-   handle zero/stale owner dates, update/reconcile Catalog and preserve recovery
-   references under reader/writer coordination. The approved production root is
-   `s3://is459-g2t1-aml-processed-bucket/bq2_sequences/`.
-4. Complete independent Athena schema/count/value/lineage acceptance for HI and LI.
-   Publication/validation teammate availability is unconfirmed; no completion is
-   assumed. Role 6 owns lift/targeting/LI robustness, Sonia owns shared Step Functions.
-5. Only then wire the integrated job's success to Role 6. Generation-only success
-   is insufficient for the final pipeline contract.
+The single job now includes the publication/Catalog component. The generation
+manifest deliberately remains staging-only and immutable; a separate verified
+publication receipt gates the job's final PUBLISHED report and successful return.
 
-Cost-conscious starting proposal, **not measured sizing**: use a coordinated
-2-5 G.1X development profile (5 for the first bounded full-data assessment), zero
-retries, no autoscaling and a reviewed service timeout. Source validation and
-global uniqueness themselves scan/shuffle millions of rows. Confirm budget and
-disk headroom; never claim a timeout is a guaranteed billing cap. A complete
-HI/LI run's runtime and output growth remain unknown until measured.
+1. Obtain fresh frozen HI/LI inventories and measured growth profiles before
+   choosing limits. Never substitute sample thresholds or fabricated evidence.
+2. Review a fresh committed release: separate `glue_full_generation.py`, the new
+   18-module `role5_full_modules.zip`, and the approved SDK wheel bundle. The old
+   sample release assembler is not a full-pipeline release verifier.
+3. Verify effective S3/Glue permissions and configured SSE-S3, SDK bootstrap,
+   timeout/concurrency/retry settings, and worker disk/shuffle capacity.
+4. Coordinate Role 6's table-wide query pause and forbid out-of-band Catalog
+   writers. The S3 lock coordinates this implementation's publishers only.
+5. Execute independent Athena acceptance after the first authorized publication,
+   retaining query IDs, runtime/cost evidence and prior versions for recovery.
+   Teammate availability is not assumed. Sonia owns Step Functions integration;
+   Role 6 owns analytics. The job must fail on any unverified publication.
+
+Cost-conscious proposal, **not measured full-data sizing**: 5 G.1X workers for an
+initial controlled assessment, concurrency one, zero retries, autoscaling off and
+an explicitly reviewed 30-minute Glue service timeout. A 1,500-second cooperative
+budget leaves some service-time headroom but cannot cancel an in-flight Spark
+call or guarantee billing. Complete HI/LI runtime and output growth remain
+unknown; review measurements/budget before extending any limit or timeout.

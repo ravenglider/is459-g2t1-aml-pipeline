@@ -23,7 +23,8 @@ def argv(dataset="HI-Medium"):
         BUILDER_VERSION=cfg["builder_version"],BUILDER_FINGERPRINT=cfg["builder_fingerprint"],
         TIMEZONE_EVIDENCE=cfg["timezone_evidence"],NO_REFRESH_EVIDENCE=cfg["no_refresh_evidence"],
         NO_REFRESH_ACKNOWLEDGED="true",ALLOW_AWS_WRITES="true",LIMITS_EVIDENCE=cfg["limits_evidence"],
-        MAX_RECORDS_PER_FILE=str(cfg["max_records_per_file"]),MAX_RUN_SECONDS=str(cfg["max_run_seconds"]))
+        MAX_RECORDS_PER_FILE=str(cfg["max_records_per_file"]),MAX_RUN_SECONDS=str(cfg["max_run_seconds"]),
+        ALLOW_PUBLICATION="true",READERS_PAUSED="true",PUBLICATION_MAINTENANCE_EVIDENCE="Synthetic reader pause",MAX_COPY_BYTES="1000000")
     values.update({k.upper():str(v) for k,v in cfg["limits"].items()})
     values.update({k.upper():v for k,v in cfg["expected_source"].items()})
     return [item for k,v in values.items() for item in ("--"+k,v)]
@@ -32,7 +33,7 @@ def argv(dataset="HI-Medium"):
 class FullEntryTests(unittest.TestCase):
     def test_exact_hi_li_and_no_default_dataset(self):
         for dataset in ("HI-Medium","LI-Medium"):
-            self.assertEqual(entry.validate_arguments(entry.parse_arguments(argv(dataset))),config(dataset))
+            self.assertEqual(entry.validate_arguments(entry.parse_arguments(argv(dataset)))["config"],config(dataset))
         args=argv();i=args.index("--DATASET");del args[i:i+2]
         with patch("sys.stdout",new_callable=io.StringIO),patch("sys.stderr",new_callable=io.StringIO),self.assertRaises(SystemExit):
             entry.parse_arguments(args)
@@ -56,7 +57,7 @@ class FullEntryTests(unittest.TestCase):
                   "--extra-py-files",root+"role5_full_modules.zip","--scriptLocation",root+"glue_full_generation.py",
                   "--job-bookmark-option","job-bookmark-disable","--enable-auto-scaling","false",
                   "--enable-spark-ui","false","--tenant-internal","opaque"]
-        self.assertEqual(entry.validate_arguments(entry.parse_arguments(argv()+settings)),config())
+        self.assertEqual(entry.validate_arguments(entry.parse_arguments(argv()+settings))["config"],config())
         with self.assertRaises(ValueError):entry.validate_arguments(entry.parse_arguments(argv()+["--extra-py-files",root+"role5_modules.zip"]))
         with self.assertRaises(ValueError):entry.validate_arguments(entry.parse_arguments(argv()+["--additional-python-modules","boto3==1.35.93"]))
 
@@ -66,13 +67,52 @@ class FullEntryTests(unittest.TestCase):
             entry._initialize(config())
         self.assertIs(caught.exception,error)
 
-    def test_thin_entry_success_failure_and_no_publication(self):
+    def test_publication_activation_pause_and_copy_bound_rejected_before_clients(self):
+        cases=[]
+        for name,value in (("ALLOW_PUBLICATION","false"),("READERS_PAUSED","false"),("MAX_COPY_BYTES","0"),
+                           ("PUBLICATION_MAINTENANCE_EVIDENCE",""),("RESUME_PUBLICATION","yes")):
+            args=argv()
+            if "--"+name in args:args[args.index("--"+name)+1]=value
+            else:args += ["--"+name,value]
+            cases.append(args)
+        with patch.object(entry,"_initialize") as initialize,patch("sys.stdout"),patch("sys.stderr"):
+            for args in cases:
+                with self.subTest(args=args),self.assertRaises((ValueError,SystemExit)):entry.main(args)
+            initialize.assert_not_called()
+
+    def test_publication_failure_or_unverified_result_never_commits(self):
+        completed=dict(manifest=dict(state="STAGED_VALIDATED",published=False,counts={"2":1,"3":1},row_count=2),manifest_uri="synthetic")
+        for failure in (RuntimeError("Catalog failure"),None):
+            job=MagicMock()
+            with patch.object(entry,"_initialize",return_value=({},job)),patch.object(entry,"run_full_generation",return_value=completed), \
+                 patch.object(entry,"publish_full_generation",side_effect=failure,return_value=dict(published=False,catalog_updated=False)), \
+                 self.assertRaises((RuntimeError,ValueError)):
+                entry.main(argv())
+            job.commit.assert_not_called()
+
+    def test_explicit_resume_loads_same_handoff_without_regeneration(self):
+        job=MagicMock();completed=dict(manifest=dict(state="STAGED_VALIDATED",published=False,counts={"2":1,"3":1},row_count=2),manifest_uri="synthetic")
+        with patch.object(entry,"_initialize",return_value=({"s3_client":"injected"},job)), \
+             patch.object(entry,"load_generation_handoff",return_value=completed) as load, \
+             patch.object(entry,"run_full_generation") as generate, \
+             patch.object(entry,"publish_full_generation",return_value=dict(published=True,catalog_updated=True,publication_uri="receipt",table="production")) as publish, \
+             patch("sys.stdout"):
+            self.assertEqual(entry.main(argv()+["--RESUME_PUBLICATION","true"]),0)
+        generate.assert_not_called();load.assert_called_once_with(config(),"injected")
+        self.assertIs(publish.call_args.kwargs["resume"],True)
+        job.commit.assert_called_once()
+
+    def test_thin_entry_success_failure_and_publication_gate(self):
         job=MagicMock()
         completed=dict(manifest=dict(state="STAGED_VALIDATED",published=False,counts={"2":1,"3":1},row_count=2),manifest_uri="synthetic")
-        with patch.object(entry,"_initialize",return_value=({},job)),patch.object(entry,"run_full_generation",return_value=completed) as run,patch("sys.stdout",new_callable=io.StringIO) as out:
+        with patch.object(entry,"_initialize",return_value=({},job)),patch.object(entry,"run_full_generation",return_value=completed) as run, \
+             patch.object(entry,"publish_full_generation",return_value=dict(published=True,catalog_updated=True,publication_uri="receipt",table="is459_g2t1_aml.bq2_sequences")) as publish, \
+             patch("sys.stdout",new_callable=io.StringIO) as out:
             self.assertEqual(entry.main(argv()),0)
             run.assert_called_once_with(config(),allow_writes=True)
-            self.assertIn('"catalog_updated": false',out.getvalue())
+            self.assertIn('"catalog_updated": true',out.getvalue())
+            self.assertIn('"status": "PUBLISHED"',out.getvalue())
+            publish.assert_called_once()
             job.commit.assert_called_once()
         job.reset_mock()
         with patch.object(entry,"_initialize",return_value=({},job)),patch.object(entry,"run_full_generation",side_effect=RuntimeError("staging failed")),self.assertRaises(RuntimeError):
@@ -81,7 +121,7 @@ class FullEntryTests(unittest.TestCase):
 
 
 class FullPackagingTests(unittest.TestCase):
-    def test_separate_deterministic_seventeen_modules_and_no_overwrite(self):
+    def test_separate_deterministic_eighteen_modules_and_no_overwrite(self):
         from package_glue_modules import GENERATION_MODULES
         with tempfile.TemporaryDirectory() as folder:
             first,second=Path(folder)/"one.zip",Path(folder)/"two.zip"
@@ -89,7 +129,7 @@ class FullPackagingTests(unittest.TestCase):
             self.assertEqual(package.build_full_package(second),digest)
             self.assertEqual(first.read_bytes(),second.read_bytes())
             with zipfile.ZipFile(first) as archive:
-                self.assertEqual(archive.namelist(),sorted(package.FULL_MODULES));self.assertEqual(len(archive.namelist()),17)
+                self.assertEqual(archive.namelist(),sorted(package.FULL_MODULES));self.assertEqual(len(archive.namelist()),18)
                 self.assertIsNone(archive.testzip())
                 self.assertNotIn("glue_full_generation.py",archive.namelist())
                 self.assertEqual(len(GENERATION_MODULES),13)

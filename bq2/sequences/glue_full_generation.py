@@ -1,19 +1,20 @@
-"""Reusable HI/LI Glue 5.0 entry point: full generation + staging, NOT publication.
+"""Reusable HI/LI Glue 5.0 generation, validation and production publication.
 
-Deploy separately from the successful sample entrypoint. The eventual single
-production job must add reviewed publication/Catalog integration before it can
-claim Sonia's final contract. Importing this module creates no clients or Spark.
+Deploy separately from the successful sample entrypoint. Publication requires
+explicit write activation and a coordinated reader pause; import is inert.
 """
 import argparse
 import json
 import re
 import sys
+import time
 
 from glue_sample_generation import (
     _Parser, _SingleValue, _OpaqueRuntimeValue, _summarize_unrecognized,
     _validate_sdk_installation, SCRIPT_ROOT, TEMP_ROOT, JOB_NAME,
 )
 from sequence_full_generation import LIMIT_NAMES, validate_full_config, run_full_generation
+from sequence_full_publication import publish_full_generation, load_generation_handoff
 
 
 def parse_arguments(argv=None):
@@ -21,10 +22,14 @@ def parse_arguments(argv=None):
     for name in ("EXPECTED_ACCOUNT_ID", "DATASET", "REGION", "RUN_ID", "ATTEMPT_ID", "OWNER_TOKEN",
                  "BUILDER_VERSION", "BUILDER_FINGERPRINT", "SOURCE_FINGERPRINT", "TABLE_FINGERPRINT",
                  "PARTITIONS_FINGERPRINT", "TIMEZONE_EVIDENCE", "NO_REFRESH_EVIDENCE", "LIMITS_EVIDENCE",
-                 "MAX_RECORDS_PER_FILE", "MAX_RUN_SECONDS", *(n.upper() for n in LIMIT_NAMES)):
+                 "MAX_RECORDS_PER_FILE", "MAX_RUN_SECONDS", "MAX_COPY_BYTES", "PUBLICATION_MAINTENANCE_EVIDENCE",
+                 *(n.upper() for n in LIMIT_NAMES)):
         parser.add_argument("--"+name, required=True, action=_SingleValue)
     parser.add_argument("--ALLOW_AWS_WRITES", choices=("true", "false"), default="false", action=_SingleValue)
     parser.add_argument("--NO_REFRESH_ACKNOWLEDGED", choices=("true", "false"), required=True, action=_SingleValue)
+    parser.add_argument("--ALLOW_PUBLICATION", choices=("true", "false"), default="false", action=_SingleValue)
+    parser.add_argument("--READERS_PAUSED", choices=("true", "false"), default="false", action=_SingleValue)
+    parser.add_argument("--RESUME_PUBLICATION", choices=("true", "false"), default="false", action=_SingleValue)
     parser.add_argument("--JOB_NAME", default=JOB_NAME, choices=(JOB_NAME,), action=_SingleValue)
     # Optional bootstrap metadata may be consumed by Glue before Python starts.
     for name in ("JOB_ID", "JOB_RUN_ID", "SECURITY_CONFIGURATION", "TempDir", "extra-py-files", "scriptLocation",
@@ -58,6 +63,10 @@ def parse_arguments(argv=None):
 def validate_arguments(args):
     if args.ALLOW_AWS_WRITES != "true":
         raise ValueError("Explicit --ALLOW_AWS_WRITES=true required")
+    if args.ALLOW_PUBLICATION != "true" or args.READERS_PAUSED != "true":
+        raise ValueError("Explicit publication activation and reader maintenance pause required")
+    if not args.PUBLICATION_MAINTENANCE_EVIDENCE.strip():
+        raise ValueError("Publication maintenance coordination evidence required")
     def positive(name):
         value = getattr(args, name)
         if not re.fullmatch(r"[1-9][0-9]{0,17}", value):
@@ -72,7 +81,7 @@ def validate_arguments(args):
         raise ValueError("Unsafe Glue runtime settings")
     if args.job_bookmark_option not in (None, "job-bookmark-disable"):
         raise ValueError("Bookmarks must be disabled")
-    return validate_full_config(dict(dataset=args.DATASET, account_id=args.EXPECTED_ACCOUNT_ID,
+    config = validate_full_config(dict(dataset=args.DATASET, account_id=args.EXPECTED_ACCOUNT_ID,
         region=args.REGION, run_id=args.RUN_ID, attempt_id=args.ATTEMPT_ID, owner_token=args.OWNER_TOKEN,
         builder_version=args.BUILDER_VERSION, builder_fingerprint=args.BUILDER_FINGERPRINT,
         timezone_evidence=args.TIMEZONE_EVIDENCE, no_refresh_acknowledged=args.NO_REFRESH_ACKNOWLEDGED == "true",
@@ -80,6 +89,8 @@ def validate_arguments(args):
         limits_evidence=args.LIMITS_EVIDENCE, max_records_per_file=positive("MAX_RECORDS_PER_FILE"),
         max_run_seconds=positive("MAX_RUN_SECONDS"), verified_empty_dates={},
         expected_source={n.lower():getattr(args, n) for n in ("SOURCE_FINGERPRINT", "TABLE_FINGERPRINT", "PARTITIONS_FINGERPRINT")}))
+    return dict(config=config,max_copy_bytes=positive("MAX_COPY_BYTES"),
+        maintenance_evidence=args.PUBLICATION_MAINTENANCE_EVIDENCE,resume=args.RESUME_PUBLICATION=="true")
 
 
 def _initialize(config):
@@ -109,17 +120,29 @@ def _initialize(config):
 
 
 def main(argv=None):
-    config = validate_arguments(parse_arguments(argv))
+    settings = validate_arguments(parse_arguments(argv))
+    config = settings["config"]
+    started = time.monotonic()
     dependencies, job = _initialize(config)
-    result = run_full_generation(config, allow_writes=True, **dependencies)
+    result = (load_generation_handoff(config,dependencies["s3_client"]) if settings["resume"]
+              else run_full_generation(config, allow_writes=True, **dependencies))
     manifest = result["manifest"]
     if manifest["state"] != "STAGED_VALIDATED" or manifest["published"] is not False:
         raise ValueError("Incomplete generation-only handoff")
+    remaining=config["max_run_seconds"]-int(time.monotonic()-started)
+    if remaining <= 0:
+        raise TimeoutError("Integrated job time budget exhausted before publication")
+    publication=publish_full_generation(dict(config,max_run_seconds=remaining),result,
+        allow_publication=True,readers_paused=True,maintenance_evidence=settings["maintenance_evidence"],
+        max_copy_bytes=settings["max_copy_bytes"],resume=settings["resume"],**dependencies)
+    if publication.get("published") is not True or publication.get("catalog_updated") is not True:
+        raise ValueError("Production publication was not independently verified")
     job.commit()
-    print("FULL_GENERATION | "+json.dumps(dict(status="STAGED_VALIDATED", dataset=config["dataset"],
+    print("FULL_GENERATION | "+json.dumps(dict(status="PUBLISHED", dataset=config["dataset"],
         run_id=config["run_id"], attempt_id=config["attempt_id"], counts=manifest["counts"],
         row_count=manifest["row_count"], manifest_uri=result["manifest_uri"],
-        published=False, catalog_updated=False, publication_required=True), sort_keys=True))
+        publication_uri=publication["publication_uri"],table=publication["table"],
+        published=True, catalog_updated=True, publication_required=False), sort_keys=True))
     return 0
 
 
