@@ -34,3 +34,5 @@ The result crops do not display full SQL, account/region or query execution IDs.
 [25-final-partition-coverage.png](25-final-partition-coverage.png): metadata summary shows HI-Medium 28 partitions/distinct dates, 2022-09-01 through 2022-09-28; LI-Medium 25 partitions/distinct dates, 2022-09-01 through 2022-09-25. Runtime 557 ms, queue 91 ms, displayed scan 0.98 KB. LI differs from the expected source scope ending September 27; empty-output versus unpublished dates requires owner confirmation.
 
 [26-final-output-table-check.png](26-final-output-table-check.png): final output-name lookup returned zero rows for bq2_lift, bq2_tradeoff, bq2_robustness and bq2_sankey in the current session. Runtime 571 ms, queue 102 ms; scanned shown as a dash. SQL attribution comes from conversation; query ID not supplied. S3 destination contents are a separate check.
+
+[27-final-lift-created.png](27-final-lift-created.png): final lift CTAS completed successfully. Runtime 6.882 sec, queue 139 ms, scanned 1.74 GB; result reuse off. SQL attribution from walkthrough; query ID not supplied. Output totals/rankings require subsequent checks.

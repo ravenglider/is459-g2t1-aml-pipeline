@@ -87,3 +87,5 @@ Final input check (9 November 2026): 21-column schema is compatible. The publish
 Final date coverage (9 November 2026): metadata confirms HI 28/28 expected dates. LI has 25 dates ending September 25; September 26/27 need owner confirmation as validated empty outputs or pending publication. Full-scope LI completeness is not yet established; retain the full agreed cleaned-source denominator. Screenshot 25 and details are in [results](results.md#final-partition-coverage-discrepancy--9-november-2026).
 
 Final-run readiness update (9 November 2026): Sonia reports gated publication passed and LI September 26/27 are validated empty sequence dates; formal acceptance receipts remain to be linked. Own final output-name lookup returned zero rows (screenshot 26). Next: confirm final S3 output destinations are empty, then execute production Role 6 SQL against bq2_sequences.
+
+Final lift created (9 November 2026): production bq2_lift CTAS succeeded, 6.882 sec and 1.74 GB scanned (screenshot 27), after user-confirmed empty final output destinations. Final lift reconciliation/rankings, trade-off/robustness/Sankey tables and final Tableau updates remain pending.
