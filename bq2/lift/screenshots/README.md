@@ -46,3 +46,5 @@ The result crops do not display full SQL, account/region or query execution IDs.
 - `31-final-tradeoff-reconciliation.png`: all 12 final trade-off groups have 4 policy rows and 0 accounting errors; 538 ms runtime, 1.85 KB scanned. Rate/denominator and monotonicity checks remain separate.
 
 - `32-final-robustness-created.png`: successful final robustness CTAS, 867 ms runtime, 54.84 KB scanned; query ID not supplied.
+
+- `33-final-sankey-created.png`: final Sankey CTAS succeeded; runtime 868 ms, queue 83 ms, scanned 6.88 KB. Grouped reconciliation remains pending.

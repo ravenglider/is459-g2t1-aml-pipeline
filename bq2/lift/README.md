@@ -104,3 +104,5 @@ Final trade-off accounting check passed: 12 groups × 4 policy rows, zero accoun
 Final min_support=100 trade-off CSV validated: 16 policy rows, 64 rate formulas, expected populations and monotonic review/flag counts. See [results](results.md). Final pattern-level robustness, Sankey and Tableau updates remain pending.
 
 Final robustness export checked at support 100: 20 HI-selected patterns; LI lift remains above 1 for 10/10 pairs and 8/10 triples. All LI rates/lifts recomputed; see [results](results.md). Final lift cross-comparison, Sankey and Tableau updates remain pending.
+
+Final Sankey CTAS completed ([screenshot 33](screenshots/33-final-sankey-created.png)); grouped reconciliation and final CSV export remain pending.

@@ -215,3 +215,8 @@ Pair top-5 flags no more laundering transactions than top-3 on either dataset wh
 All ten selected pairs have LI lift >1; nine remain in the independent LI top ten. ACH -> ACH falls from HI lift 8.51 to LI lift 2.23. Eight selected triples have LI lift >1; five remain in the independent LI top ten. ACH -> ACH -> Cheque (0.9882) and ACH -> ACH -> Cash (0.9249) fall below the LI baseline. All twenty meet LI support requirements; Supported on LI denotes support eligibility, not elevated risk or statistical significance. Overlapping sequences are not independent observations. These are descriptive robustness comparisons, not evidence of production detection performance.
 
 Next: final Sankey creation/reconciliation and lift/Sankey exports, then final Tableau updates.
+
+
+## Final Sankey table creation — 9 November 2026
+
+[Creation screenshot](screenshots/33-final-sankey-created.png) shows successful final Sankey CTAS: runtime 868 ms, queue 83 ms, data scanned 6.88 KB; query ID not supplied. Statement attribution follows the walkthrough. Screenshot copied byte-for-byte and Desktop original retained. This establishes execution success, not reconciliation. Next: compare grouped pattern, total-sequence and positive-sequence counts against the final lift totals, then export.
