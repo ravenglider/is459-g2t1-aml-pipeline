@@ -220,3 +220,8 @@ Next: final Sankey creation/reconciliation and lift/Sankey exports, then final T
 ## Final Sankey table creation — 9 November 2026
 
 [Creation screenshot](screenshots/33-final-sankey-created.png) shows successful final Sankey CTAS: runtime 868 ms, queue 83 ms, data scanned 6.88 KB; query ID not supplied. Statement attribution follows the walkthrough. Screenshot copied byte-for-byte and Desktop original retained. This establishes execution success, not reconciliation. Next: compare grouped pattern, total-sequence and positive-sequence counts against the final lift totals, then export.
+
+
+## Final Sankey reconciliation — 9 November 2026
+
+[Grouped reconciliation](screenshots/34-final-sankey-reconciliation.png) matches the previously recorded final lift aggregates exactly: HI pairs 41 patterns / 665,175,780 sequences / 1,274,451 positive sequences; HI triples 224 / 786,431,531 / 2,344,593; LI pairs 39 / 651,111,295 / 1,016,070; LI triples 218 / 769,082,499 / 1,425,484. Thus 522 pattern rows across four scopes. Counts are overlapping sequence occurrences, not distinct transactions or monetary values. This aggregate check does not independently validate every split method field. Runtime 408 ms, queue 90 ms, scanned 3.57 KB; query ID not supplied. Screenshot copied byte-for-byte; Desktop original retained. Next: export final Sankey and lift CSVs for field-level checks and Tableau.

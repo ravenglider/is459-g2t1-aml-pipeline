@@ -106,3 +106,5 @@ Final min_support=100 trade-off CSV validated: 16 policy rows, 64 rate formulas,
 Final robustness export checked at support 100: 20 HI-selected patterns; LI lift remains above 1 for 10/10 pairs and 8/10 triples. All LI rates/lifts recomputed; see [results](results.md). Final lift cross-comparison, Sankey and Tableau updates remain pending.
 
 Final Sankey CTAS completed ([screenshot 33](screenshots/33-final-sankey-created.png)); grouped reconciliation and final CSV export remain pending.
+
+Final Sankey grouped reconciliation passed for all four HI/LI and pair/triple scopes ([screenshot 34](screenshots/34-final-sankey-reconciliation.png)). Final Sankey/lift CSV exports and Tableau updates remain pending.
