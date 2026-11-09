@@ -89,3 +89,5 @@ Final date coverage (9 November 2026): metadata confirms HI 28/28 expected dates
 Final-run readiness update (9 November 2026): Sonia reports gated publication passed and LI September 26/27 are validated empty sequence dates; formal acceptance receipts remain to be linked. Own final output-name lookup returned zero rows (screenshot 26). Next: confirm final S3 output destinations are empty, then execute production Role 6 SQL against bq2_sequences.
 
 Final lift created (9 November 2026): production bq2_lift CTAS succeeded, 6.882 sec and 1.74 GB scanned (screenshot 27), after user-confirmed empty final output destinations. Final lift reconciliation/rankings, trade-off/robustness/Sankey tables and final Tableau updates remain pending.
+
+Final lift totals checked (9 November 2026): all four HI/LI length groups present and baseline arithmetic matches the displayed counts. Counts are recorded in [results](results.md#final-lift-totals--9-november-2026); formal upstream acceptance comparison remains pending receipt availability. Next: production tradeoff.sql; final robustness/Sankey outputs and Tableau updates still pending.

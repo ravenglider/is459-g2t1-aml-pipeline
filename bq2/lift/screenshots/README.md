@@ -36,3 +36,5 @@ The result crops do not display full SQL, account/region or query execution IDs.
 [26-final-output-table-check.png](26-final-output-table-check.png): final output-name lookup returned zero rows for bq2_lift, bq2_tradeoff, bq2_robustness and bq2_sankey in the current session. Runtime 571 ms, queue 102 ms; scanned shown as a dash. SQL attribution comes from conversation; query ID not supplied. S3 destination contents are a separate check.
 
 [27-final-lift-created.png](27-final-lift-created.png): final lift CTAS completed successfully. Runtime 6.882 sec, queue 139 ms, scanned 1.74 GB; result reuse off. SQL attribution from walkthrough; query ID not supplied. Output totals/rankings require subsequent checks.
+
+[28-final-lift-totals.png](28-final-lift-totals.png): four dataset/length groups from final bq2_lift, selecting min_support 100 only. Runtime 548 ms, queue 95 ms, scanned 8.93 KB. Baselines independently recomputed from the displayed positive/total counts; upstream acceptance comparison remains pending receipt availability.

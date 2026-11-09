@@ -159,3 +159,17 @@ Sonia reports 9thrun_gated passed and the bq2_sequences view now points to the c
 Xiang Ying confirmed all four final S3 output destinations were empty/not yet created before the first CTAS. This is user-reported destination inspection. [Own completion screenshot](screenshots/27-final-lift-created.png) shows the production bq2_lift.sql statement completed: runtime 6.882 sec, queue 139 ms, scanned 1.74 GB, reuse toggle off; query ID not supplied. Statement attribution comes from the preceding walkthrough, since the crop omits SQL. Production output is is459_g2t1_aml.bq2_lift at s3://is459-g2t1-aml-processed-bucket/bq2_lift/, with HI/LI aggregation and 50/100/500 support policies. Screenshot copied byte-for-byte; Desktop original retained.
 
 Next: inspect counts and positive-chain baselines by dataset/length using one min_support copy, compare with upstream acceptance counts, then review rankings. CTAS success alone does not establish reconciled final findings. Final trade-off, robustness, Sankey CTAS and final Tableau refresh remain pending. Do not rerun CREATE TABLE against the populated destination.
+
+
+## Final lift totals — 9 November 2026
+
+[Own aggregate result](screenshots/28-final-lift-totals.png), one min_support=100 policy copy:
+
+| Dataset | Length | Distinct patterns | Sequences | Positive sequences | Baseline (%) |
+|---|---:|---:|---:|---:|---:|
+| HI-Medium | 2 | 41 | 665,175,780 | 1,274,451 | 0.191596 |
+| HI-Medium | 3 | 224 | 786,431,531 | 2,344,593 | 0.298131 |
+| LI-Medium | 2 | 39 | 651,111,295 | 1,016,070 | 0.156052 |
+| LI-Medium | 3 | 218 | 769,082,499 | 1,425,484 | 0.185349 |
+
+All four baseline values independently recompute as positive_sequences / total_sequences to floating-point tolerance. Total occurrence count across groups is 2,871,801,105, not distinct transactions. Positive sequences use any_laundering, may overlap and are not final-transaction target counts. These are downstream aggregate observations, not an independent replay of upstream sequence construction. Formal upstream acceptance receipts were still absent under bq2/sequences/athena/evidence/ on origin/main at this check; compare counts when supplied. Runtime 548 ms, queue 95 ms, scanned 8.93 KB; query ID and CSV not supplied. Screenshot copied byte-for-byte, Desktop original retained. Next: create final trade-off output using frozen HI-ranked patterns evaluated on both datasets.
