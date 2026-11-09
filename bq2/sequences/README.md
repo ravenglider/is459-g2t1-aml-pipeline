@@ -1,6 +1,6 @@
 # Role 5: BQ2 Payment Sequence Builder
 
-**Owner:** Ji Ning. **Status updated:** 5 November 2026.
+**Owner:** Ji Ning. **Status updated:** 9 November 2026.
 
 ## Which builder is in production (updated 9 November 2026)
 
@@ -8,7 +8,7 @@
 
 **Prototype and reference:** the Glue Spark code in this folder built and verified the sample (`bq2_sequences_dev`) and defines the schema ([schema_bq2_sequences.md](schema_bq2_sequences.md)) and chain rules ([sequence_rules.md](sequence_rules.md)) that the Athena build follows. Its HI 2022-09-01 counts (14,679,196 pairs, 36,965,485 triples) matched the Athena output exactly. The sections below record that Glue work as of 5 to 7 November; statements there that HI/LI generation or `bq2_sequences` publication are "not yet" done are superseded by this note.
 
-Role 5 builds linked payment-method and currency sequences from Role 2's cleaned transactions, preserving transaction identities and laundering labels for Xiang Ying's Role 6 Athena analysis. The builder and supporting workflow have been tested locally. Release `_07` completed the sample-only AWS Glue preflight successfully in run09 (`SUCCEEDED`, `VALIDATED_READ_ONLY`). Real sequence generation and publication remain unfinished; this validation covers only the provided 500,000-row sample.
+Role 5 builds linked payment-method and currency sequences from Role 2's cleaned transactions, preserving transaction identities and laundering labels for Xiang Ying's Role 6 Athena analysis. The builder and supporting workflow have been tested locally. Release `_07` completed the sample-only AWS Glue preflight successfully in run09 (`SUCCEEDED`, `VALIDATED_READ_ONLY`). Subsequent Glue runs generated and staged sample sequences, and the sample development publication was accepted as recorded below. Bounded HI Glue benchmarks also succeeded; full HI/LI generation through Glue was not completed. Run09 itself covers only the provided 500,000-row sample.
 
 ## Sample Development Publication — 2026-11-07
 
@@ -31,6 +31,21 @@ All four Athena acceptance queries returned `SUCCEEDED`:
 Evidence: [publication summary](evidence/role5-publication-summary.txt). The file-level archive `evidence/role5-publication-evidence.zip` is local-only, excluded from Git and unavailable through GitHub. The original staging manifest remains **`STAGED_VALIDATED`, `published=false`**; the separate manual development publication is supported by independent copy, Catalog and Athena acceptance evidence, not a `PUBLISHED` staging-manifest state.
 
 This is a **sample-only integration dataset, not the final HI/LI analytical dataset**. Output ownership is September 1, 2022, with continuation inputs through September 3. The sample may be truncated; publication does not establish completeness of the underlying HI-Medium or LI-Medium datasets.
+
+## Full HI-Medium Glue Generation Experiments — 9 November 2026
+
+The following AWS measurements are recorded from Ji Ning's reported Glue run results. The exact growth probe for September 1, 2022 measured **14,679,196 valid pairs** and **36,965,485 projected triples**, totalling **51,644,681 projected sequences**; the probe wrote no sequence output.
+
+| Glue benchmark | Workers | September 1 ownership scope | Result / execution time | Validated output |
+| --- | --- | --- | --- | --- |
+| Original recoverable runner | 5 G.1X | Roots 0–3 of 4,096 | `SUCCEEDED`; 777 seconds | 9,454 pairs + 23,079 triples = **32,533 sequences** |
+| Coarse-root runner | 10 G.1X | Root 0 of 256 | `SUCCEEDED`; 883 seconds | 119,638 pairs + 314,032 triples = **433,670 sequences** |
+
+Both benchmarks wrote isolated S3 staging output and completion receipts for their bounded work. Existing attempts were preserved; neither benchmark completed the whole owner date or published production data. Large sequence volumes and repeated Spark processing, adaptive splitting, validation and staging overhead made full 28-date HI-Medium generation impractically slow through these tested approaches.
+
+An experimental batched Spark runner was developed and passed local correctness and recovery tests, including shared-chunk receipts and interruption handling. It was **not deployed or benchmarked in AWS** and did not complete full HI generation. See [sequence_batched_kernel.py](sequence_batched_kernel.py), [sequence_batched_staging.py](sequence_batched_staging.py) and [recovery tests](tests/test_sequence_batched_staging.py).
+
+Multiple Glue optimization attempts demonstrated correctness and recoverability, but scaling the tested approaches to the complete HI-Medium dataset was not practical within the available project time and compute budget. No full HI-Medium or LI-Medium completion is claimed for Glue.
 
 ## Sequence-building rules
 
@@ -59,7 +74,7 @@ Xiang Ying approved the **21-column v1 interface** in [schema_bq2_sequences.md](
 - `final_txn_id`, `gap_seconds`, `duration_seconds`, `dataset` and `start_date` support targeting, validation and partition ownership.
 - Deterministic `sequence_id` is SHA-256 over UTF-8 `v1 + LF + dataset + LF + comma-separated ordered decimal IDs`, without trailing newline or floating-point conversion.
 
-The intended storage format is Snappy Parquet partitioned by **`dataset`, then `start_date`**. This gives 19 physical file columns and two logical partition columns. No sequence table has been published yet.
+The intended storage format is Snappy Parquet partitioned by **`dataset`, then `start_date`**. This gives 19 physical file columns and two logical partition columns. The sample development table has been published and accepted; see the dated sample publication evidence above.
 
 Role 6 uses `any_laundering` for descriptive lift, separately by dataset and sequence length. Low-support patterns stay in the baseline; support sensitivity uses 50, 100 and 500. Targeted checks count distinct final transactions using original labels and all cleaned transactions as denominators. HI-selected patterns must be frozen before LI evaluation; sample results are interface checks, not final findings.
 
@@ -74,9 +89,9 @@ Role 6 uses `any_laundering` for descriptive lift, separately by dataset and seq
 | [sequence_staging.py](sequence_staging.py)             | Local immutable attempts, Snappy Parquet read-back and distributed schema/value/identity validation, including empty and failed attempts.                                                             |
 | [sequence_manifest.py](sequence_manifest.py)           | Run evidence, selected receipts, local replacement plans, revision checks and local ownership locks. Local planning states never imply publication.                                                   |
 | [sequence_aws.py](sequence_aws.py)                     | Injected sample-only Catalog reader with partition pushdown, complete sample metadata inventories and physical-schema checks. Tested with fake clients and local Spark.                               |
-| [sequence_s3.py](sequence_s3.py)                       | Injected S3 staging/read-back and conditional receipt/manifest adapters. Locally tested with fake S3 and real local Parquet; no real AWS staging performed. S3 run manifests stop at `READY_TO_PLAN`. |
+| [sequence_s3.py](sequence_s3.py)                       | Injected S3 staging/read-back and conditional receipt/manifest adapters. Tested locally and used for real sample staging; bounded HI staging is recorded above. S3 run manifests stop at `READY_TO_PLAN`. |
 | [sequence_publication.py](sequence_publication.py)     | Increment 3A only: pure development publication plans, recovery evidence and simulated ordered journals. No copying, Catalog mutations, rollback execution or `PUBLISHED` success.                    |
-| [glue_sequence_job.py](glue_sequence_job.py)           | Offline configuration CLI and gated runtime/batch helpers. Cloud sequence-generation orchestration remains unfinished.                                                                                |
+| [glue_sequence_job.py](glue_sequence_job.py)           | Offline configuration CLI and gated runtime/batch helpers. Dedicated sample and chunked Glue entry points provide cloud generation/staging orchestration.                                                                                |
 | [glue_sample_preflight.py](glue_sample_preflight.py)   | Dedicated sample validation/candidate-profile entry point; release `_07` succeeded in real AWS run09. No pairs/triples or sequence outputs were generated.                                            |
 | [package_glue_modules.py](package_glue_modules.py)     | Deterministic allowlisted ZIP creation; no upload or dependency installation.                                                                                                                         |
 | [preflight_job_settings.md](preflight_job_settings.md) | Proposed runtime settings, argument behavior, evidence requirements and execution checklist. Current upload/deployment status is recorded below.                                                      |
@@ -94,26 +109,26 @@ Staging validates written data before marking an attempt `VALIDATED`; `_SUCCESS`
 | Glue database               | `is459_g2t1_aml`                               | Existing                                                                                        |
 | Source table                | `is459_g2t1_aml.transactions_clean`            | Existing Role 2 output                                                                          |
 | Processed/source bucket     | `is459-g2t1-aml-processed-bucket`              | Existing                                                                                        |
-| Shared IAM role             | `AWSGlueServiceRole-is459g2t1`                 | Existing; run09 exercised sample-read permissions, not sequence staging/publication permissions |
+| Shared IAM role             | `AWSGlueServiceRole-is459g2t1`                 | Existing; run09 exercised sample reads; subsequent Glue generation/staging runs exercised isolated staging writes |
 | Script bucket/prefix        | `s3://is459-g2t1-aml-athena-bucket/scripts/`   | Existing team location                                                                          |
 | Glue temporary prefix       | `s3://is459-g2t1-aml-athena-bucket/glue-temp/` | Existing team location                                                                          |
 | Dedicated preflight job     | `is459-g2t1-bq2-sample-preflight`              | Existing; release `_07` run09 **SUCCEEDED**                                                     |
-| Future sequence-builder job | `is459-g2t1-bq2-sequence-builder`              | Intended name in integration helpers; not deployed                                              |
+| Dedicated sample sequence job | `is459-g2t1-bq2-sequence-builder`              | Used for real sample generation and staging                                              |
 
 Read the actual cleaned schema in [etl/schema_transactions_clean.md](../../etl/schema_transactions_clean.md), Role 2's [handoff](../../etl/README.md), and the [group infrastructure handoff](../../docs/ingestion-handoff.md). Input has 20 logical columns, partitioned by string `dataset` and `txn_date`. Always select a dataset; do not mix the sample with HI or LI. The builder now targets cleaned data, not the old raw-sample fallback.
 
-All paths below are under `s3://is459-g2t1-aml-processed-bucket/`:
+All paths below are under `s3://is459-g2t1-aml-processed-bucket/`. The production row retains the earlier proposed layout; sample/staging statuses are updated here, and current production information is preserved at the top of this README:
 
 | Purpose              | Table / relative prefix                                                                | Status                                                                        |
 | -------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | Clean input          | `is459_g2t1_aml.transactions_clean`; `transactions_clean/dataset=sample/txn_date=<D>/` | Existing sample input                                                         |
-| Development output   | `is459_g2t1_aml.bq2_sequences_dev`; `bq2_sequences_dev/`                               | Approved intended interface; not published                                    |
+| Development output   | `is459_g2t1_aml.bq2_sequences_dev`; `bq2_sequences_dev/`                               | Published and accepted for sample integration; see the versioned development location below                                    |
 | Production output    | `is459_g2t1_aml.bq2_sequences`; `bq2_sequences/`                                       | Future HI/LI destination; not published                                       |
-| Staging attempts     | `bq2_sequences_staging/<run_id>/<attempt_id>/`                                         | Adapter implemented; no real staging performed                                |
-| Development metadata | `bq2_sequences_metadata/development/`                                                  | Adapter/report design; no real evidence writes claimed                        |
-| Development versions | `bq2_sequences_dev_versions/<publication_id>/dataset=sample/start_date=<D>/`           | Publication-planning layout only; future explicit Catalog partition locations |
+| Staging attempts     | `bq2_sequences_staging/<run_id>/<attempt_id>/`                                         | Used for real sample staging; bounded HI experiments used separate isolated full-data attempts                                |
+| Development metadata | `bq2_sequences_metadata/development/`                                                  | Sample staging-run evidence recorded; the preflight report URI remains design-only                        |
+| Development versions | `bq2_sequences_dev_versions/<publication_id>/dataset=sample/start_date=<D>/`           | Used for the accepted manual sample development publication |
 
-The existing local replacement planner uses fixed canonical locations. The separate development publication planner supports versioned locations; executing that design and reconciling Catalog state remain future work. Staging/metadata stay outside queryable table roots. No development or production output table is claimed to exist from Role 5 work.
+The existing local replacement planner uses fixed canonical locations. The separate development publication planner supports versioned locations; executing that design and reconciling Catalog state remain future work. Staging/metadata stay outside queryable table roots. The sample development table is published and accepted; this does not imply production publication through Glue.
 
 ## AWS S3 upload: completed
 
@@ -255,14 +270,16 @@ A real successful validation must include a `VALIDATED_READ_ONLY` report with ma
 | Dedicated preflight Glue job created                                      | **COMPLETED**; existing job configured for `_07`                                              |
 | Real sample validation evidence                                           | Run09: `VALIDATED_READ_ONLY`, `phase=complete`; 500,000 transactions and 35 laundering labels |
 | Release `_07` AWS execution                                               | **COMPLETED**: run09 Glue status `SUCCEEDED`                                                  |
-| Real BQ2 sequence generation                                              | **NOT YET**                                                                                   |
-| HI-Medium/LI-Medium processing by Role 5                                  | **NOT YET**                                                                                   |
-| Catalog table publication                                                 | **NOT YET**                                                                                   |
-| Publication preparation/copying, Catalog switching and rollback execution | **NOT YET**; only pure planning/journal logic exists                                          |
+| Real Glue sequence generation                                            | **COMPLETED for the sample and bounded HI benchmarks**; not full HI/LI                                                                                   |
+| Full HI-Medium/LI-Medium generation through Glue                         | **NOT COMPLETED**; HI probes/benchmarks only, no full LI Glue completion                                                                                   |
+| Sample development table publication                                     | **COMPLETED**; accepted publication evidence is recorded above                                                                                   |
+| Production publication through Glue                                     | **NOT PERFORMED**; sample development publication was a separate manual handoff                                          |
 
-Any further paid execution requires separate approval and coordination with Sonia, a renewed no-refresh agreement and review of saved job settings. Do not run the shared Step Functions pipeline for the first sample test: its current ETL argument selects HI-Medium. No full-data runtime or final growth thresholds are known.
+Historical preflight safety notes (5–7 November 2026, retained for context): any further paid execution requires separate approval and coordination with Sonia, a renewed no-refresh agreement and review of saved job settings. Do not run the shared Step Functions pipeline for the first sample test: its current ETL argument selects HI-Medium. No full-data runtime or final growth thresholds are known.
 
 ## Intended Step Functions handoff for Sonia
+
+The following is the historical Glue integration proposal from 5–7 November 2026, not a current deployment-status statement.
 
 The repository's [state-machine definition](../../ingestion/stepfunctions/is459-g2t1-pipeline.asl.json) still has a Role 5 placeholder. This handoff describes future integration, not a deployed state.
 
@@ -283,11 +300,11 @@ Do not replace the sequence-builder placeholder with a preflight that merely exi
 ## Remaining documentation and delivery items
 
 - Retain run06 through run09 CloudWatch evidence and the verified run09 JobRunId above. Record total job runtime, measured cost and actual worker/settings evidence separately; 96.553 seconds is validation elapsed time, not billed runtime.
-- Agree sample growth limits and a bounded development sequence batch with Xiang Ying before generation.
-- Complete publication version preparation, durable journals, Catalog reconciliation, reader coordination and recovery execution before exposing development data.
+- Retain the agreed sample growth limits, completed sample staging receipts and accepted development publication evidence.
+- Retain the separate sample development publication evidence; any future Glue production publication requires its own validated handoff, reader coordination and recovery checks.
 - Add a real chain walkthrough after obtaining and validating actual sequence output. The current chain example in `sequence_rules.md` is fictional; `example_chain.md` has not been created.
-- Validate HI and LI independently later, retaining all source transactions for Role 6's denominators and freezing HI pattern selections before LI evaluation.
+- Any resumed full-data Glue work must validate HI and LI independently and retain all source transactions for Role 6's denominators; the Glue benchmarks above do not establish full-dataset completion.
 
 ## Contribution summary for Week 13
 
-Implemented and locally tested the Role 5 PySpark builder for linked two- and three-transaction payment-method/currency sequences, including the approved labelled output, source validation, bounded batching, growth safeguards and staging/publication preparation. Completed the read-only AWS Glue sample preflight with release `_07` in run09, validating 500,000 sample transactions and profiling conservative candidate growth. Real sequence generation and sequence-table publication remain pending.
+Implemented and locally tested the Role 5 PySpark builder for linked two- and three-transaction payment-method/currency sequences, including the approved labelled output, source validation, bounded batching, growth safeguards and staging/publication preparation. Completed the read-only AWS Glue sample preflight with release `_07` in run09, validating 500,000 sample transactions and profiling conservative candidate growth. Subsequently generated and staged validated sample sequences for the accepted development publication, profiled exact HI growth and completed recoverable bounded HI Glue benchmarks. Full HI/LI generation and production publication through Glue were not completed within the available time and compute budget.
