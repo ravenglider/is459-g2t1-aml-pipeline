@@ -100,3 +100,5 @@ The single tradeoff.sql CTAS exhausted resources at actual scale. Use the [revie
 Final trade-off Stage 2 succeeded (9 November 2026): 14.614 sec, 905.07 MB scanned; screenshot 30 saved. Normal two-stage recovery succeeded; weekly fallback is unnecessary. Final trade-off reconciliation and interpretation, robustness/Sankey CTAS and final Tableau updates remain pending.
 
 Final trade-off accounting check passed: 12 groups × 4 policy rows, zero accounting errors ([evidence](screenshots/31-final-tradeoff-reconciliation.png)). Final value inspection, robustness and final Tableau updates remain pending.
+
+Final min_support=100 trade-off CSV validated: 16 policy rows, 64 rate formulas, expected populations and monotonic review/flag counts. See [results](results.md). Final pattern-level robustness, Sankey and Tableau updates remain pending.

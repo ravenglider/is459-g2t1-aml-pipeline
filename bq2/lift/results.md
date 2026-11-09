@@ -192,3 +192,17 @@ Next: expect 48 final policy rows and zero accounting/range/denominator/monotoni
 ## Final trade-off accounting check — 9 November 2026
 
 [Reconciliation screenshot](screenshots/31-final-tradeoff-reconciliation.png) shows all 12 dataset/sequence-length/minimum-support groups, each with 4 policy rows and 0 accounting_errors (48 rows overall). The executed check verifies reviewed = laundering_flagged + legitimate_reviewed, nonnegative counts and population upper bounds. It does not yet verify rate formulas, policy identities, monotonicity or source denominators. Runtime 538 ms, queue 88 ms, scanned 1.85 KB; query ID not supplied. Screenshot copied byte-for-byte; Desktop original retained. Next: export final min_support=100 trade-off rows for inspection and Tableau.
+
+
+## Final trade-off CSV validation — 9 November 2026
+
+Validated user-exported bq2_final_tradeoff.csv (min_support=100), SHA-256: `5aaab8cbaa686ecf13771ebb1de7389255a808cc15bfc6f95543a746a62f53f0`. All 16 rows have unique dataset/length/cutoff/policy keys, complete 0/3/5/10 policy coverage, expected HI/LI source populations, correct policy names and selected-pattern counts, reconciled reviewed/flagged/legitimate counts, and 64 independently recomputed rate formulas (relative tolerance 1e-12, absolute 1e-15). Broad policies equal full source populations; reviewed, flagged and legitimate counts are nondecreasing from top-3 through top-10 to broad. Source denominators match previously recorded clean baselines, not a fresh source recount. CSV remains local under repository data policy. These checks validate aggregate consistency, not a replay of transaction-level membership or out-of-time detection performance.
+
+| Dataset | Length | Top-3 catch / legitimate review | Top-5 catch / legitimate review | Top-10 catch / legitimate review |
+| --- | --- | --- | --- | --- |
+| HI-Medium | 2 | 28.29% / 10.38% | 28.29% / 15.19% | 46.33% / 19.85% |
+| HI-Medium | 3 | 19.78% / 2.11% | 19.95% / 2.16% | 21.29% / 7.55% |
+| LI-Medium | 2 | 13.37% / 10.34% | 13.37% / 15.15% | 31.61% / 19.81% |
+| LI-Medium | 3 | 9.06% / 2.10% | 9.23% / 2.15% | 9.92% / 7.54% |
+
+Pair top-5 flags no more laundering transactions than top-3 on either dataset while increasing review workload. LI uses frozen HI-ranked selections under the two-stage SQL; independent pattern-level robustness output remains pending. HI results evaluate selection and performance on the same dataset and are descriptive, not held-out validation. Final robustness/Sankey tables, their exports and final Tableau updates remain pending.
