@@ -2,6 +2,12 @@
 
 **Owner:** Ji Ning. **Status updated:** 5 November 2026.
 
+## Which builder is in production (updated 9 November 2026)
+
+**Production:** `athena/` builds `is459_g2t1_aml.bq2_sequences` (2.87 billion HI and LI chains) inside the Step Functions pipeline. `bq2_sequences` is a view on the live copy (`bq2_sequences_a` or `bq2_sequences_b`). Each run builds the other copy and publishes it only after source, per-day and structure checks pass. See [athena/README.md](athena/README.md) and [athena/evidence/](athena/evidence/).
+
+**Prototype and reference:** the Glue Spark code in this folder built and verified the sample (`bq2_sequences_dev`) and defines the schema ([schema_bq2_sequences.md](schema_bq2_sequences.md)) and chain rules ([sequence_rules.md](sequence_rules.md)) that the Athena build follows. Its HI 2022-09-01 counts (14,679,196 pairs, 36,965,485 triples) matched the Athena output exactly. The sections below record that Glue work as of 5 to 7 November; statements there that HI/LI generation or `bq2_sequences` publication are "not yet" done are superseded by this note.
+
 Role 5 builds linked payment-method and currency sequences from Role 2's cleaned transactions, preserving transaction identities and laundering labels for Xiang Ying's Role 6 Athena analysis. The builder and supporting workflow have been tested locally. Release `_07` completed the sample-only AWS Glue preflight successfully in run09 (`SUCCEEDED`, `VALIDATED_READ_ONLY`). Real sequence generation and publication remain unfinished; this validation covers only the provided 500,000-row sample.
 
 ## Sample Development Publication — 2026-11-07
@@ -15,12 +21,12 @@ Role 5 builds linked payment-method and currency sequences from Role 2's cleaned
 
 All four Athena acceptance queries returned `SUCCEEDED`:
 
-| Check | Query ID | Accepted result |
-|---|---|---|
-| Counts | `4971124e-fee8-4fc4-8551-07af320896d4` | 184,449 pairs; 33,931 triples |
-| Structure and labels | `ada6c118-152f-4619-9dc8-a533295ec722` | 218,380 rows; 0 bad rows |
-| Transaction-ID existence | `13bf9fdf-bd08-43a7-90e5-8332dae6ee39` | 0 missing members |
-| Full lineage | `d4e7f074-9d57-4c12-81a8-13ad4860abd0` | 0 link errors; 0 member errors; 0 duplicate/null source IDs in the selected source partitions |
+| Check                    | Query ID                               | Accepted result                                                                               |
+| ------------------------ | -------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Counts                   | `4971124e-fee8-4fc4-8551-07af320896d4` | 184,449 pairs; 33,931 triples                                                                 |
+| Structure and labels     | `ada6c118-152f-4619-9dc8-a533295ec722` | 218,380 rows; 0 bad rows                                                                      |
+| Transaction-ID existence | `13bf9fdf-bd08-43a7-90e5-8332dae6ee39` | 0 missing members                                                                             |
+| Full lineage             | `d4e7f074-9d57-4c12-81a8-13ad4860abd0` | 0 link errors; 0 member errors; 0 duplicate/null source IDs in the selected source partitions |
 
 Evidence: [publication summary](evidence/role5-publication-summary.txt). The file-level archive `evidence/role5-publication-evidence.zip` is local-only, excluded from Git and unavailable through GitHub. The original staging manifest remains **`STAGED_VALIDATED`, `published=false`**; the separate manual development publication is supported by independent copy, Catalog and Athena acceptance evidence, not a `PUBLISHED` staging-manifest state.
 
@@ -48,7 +54,7 @@ For example, transfers at 09:00, 12:00 and 12:00 the following day form a valid 
 Xiang Ying approved the **21-column v1 interface** in [schema_bq2_sequences.md](schema_bq2_sequences.md). One row represents one distinct ordered chain, with `sequence_length` distinguishing pairs and triples.
 
 - Ordered arrays retain transaction IDs, timestamps, payment methods, payment/receiving currencies and original member labels. IDs remain signed 64-bit `bigint` values, including negative values.
-- Readable method and currency strings use the exact separator ` -> `. Sender-side and receiver-side currencies remain separate.
+- Readable method and currency strings use the exact separator `->`. Sender-side and receiver-side currencies remain separate.
 - Labels include `laundering_count`, `any_laundering`, `all_laundering` and the original `final_is_laundering`. For member labels `[1,0]`, `any_laundering=1` while `final_is_laundering=0`.
 - `final_txn_id`, `gap_seconds`, `duration_seconds`, `dataset` and `start_date` support targeting, validation and partition ownership.
 - Deterministic `sequence_id` is SHA-256 over UTF-8 `v1 + LF + dataset + LF + comma-separated ordered decimal IDs`, without trailing newline or floating-point conversion.
@@ -59,22 +65,22 @@ Role 6 uses `any_laundering` for descriptive lift, separately by dataset and seq
 
 ## Implementation
 
-| File | Responsibility and current boundary |
-|---|---|
-| [bq2_sequence_builder.py](bq2_sequence_builder.py) | Importable PySpark source validation, two-/three-transaction links and 21-column output; not a standalone runnable Glue job. |
-| [sequence_processing.py](sequence_processing.py) | Pure date planning. Owner date D reads D/D+1/D+2, distinguishing missing partitions, verified-empty dates and confirmed extract boundaries. |
-| [sequence_source.py](sequence_source.py) | Local Parquet reader, exact 20-column schema validation, identity checks and deterministic source-inventory fingerprints. Global completeness needs separate evidence. |
-| [sequence_batch.py](sequence_batch.py) | Anchored batch processing, conservative pair-candidate bounds, exact triple-degree projections, explicit growth limits and owned-cache cleanup. Current runner requires verified UTC semantics. |
-| [sequence_staging.py](sequence_staging.py) | Local immutable attempts, Snappy Parquet read-back and distributed schema/value/identity validation, including empty and failed attempts. |
-| [sequence_manifest.py](sequence_manifest.py) | Run evidence, selected receipts, local replacement plans, revision checks and local ownership locks. Local planning states never imply publication. |
-| [sequence_aws.py](sequence_aws.py) | Injected sample-only Catalog reader with partition pushdown, complete sample metadata inventories and physical-schema checks. Tested with fake clients and local Spark. |
-| [sequence_s3.py](sequence_s3.py) | Injected S3 staging/read-back and conditional receipt/manifest adapters. Locally tested with fake S3 and real local Parquet; no real AWS staging performed. S3 run manifests stop at `READY_TO_PLAN`. |
-| [sequence_publication.py](sequence_publication.py) | Increment 3A only: pure development publication plans, recovery evidence and simulated ordered journals. No copying, Catalog mutations, rollback execution or `PUBLISHED` success. |
-| [glue_sequence_job.py](glue_sequence_job.py) | Offline configuration CLI and gated runtime/batch helpers. Cloud sequence-generation orchestration remains unfinished. |
-| [glue_sample_preflight.py](glue_sample_preflight.py) | Dedicated sample validation/candidate-profile entry point; release `_07` succeeded in real AWS run09. No pairs/triples or sequence outputs were generated. |
-| [package_glue_modules.py](package_glue_modules.py) | Deterministic allowlisted ZIP creation; no upload or dependency installation. |
-| [preflight_job_settings.md](preflight_job_settings.md) | Proposed runtime settings, argument behavior, evidence requirements and execution checklist. Current upload/deployment status is recorded below. |
-| [tests/](tests/) | Synthetic fixtures, Spark regression checks, fake AWS clients, local Parquet tests and packaging/import checks. |
+| File                                                   | Responsibility and current boundary                                                                                                                                                                   |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [bq2_sequence_builder.py](bq2_sequence_builder.py)     | Importable PySpark source validation, two-/three-transaction links and 21-column output; not a standalone runnable Glue job.                                                                          |
+| [sequence_processing.py](sequence_processing.py)       | Pure date planning. Owner date D reads D/D+1/D+2, distinguishing missing partitions, verified-empty dates and confirmed extract boundaries.                                                           |
+| [sequence_source.py](sequence_source.py)               | Local Parquet reader, exact 20-column schema validation, identity checks and deterministic source-inventory fingerprints. Global completeness needs separate evidence.                                |
+| [sequence_batch.py](sequence_batch.py)                 | Anchored batch processing, conservative pair-candidate bounds, exact triple-degree projections, explicit growth limits and owned-cache cleanup. Current runner requires verified UTC semantics.       |
+| [sequence_staging.py](sequence_staging.py)             | Local immutable attempts, Snappy Parquet read-back and distributed schema/value/identity validation, including empty and failed attempts.                                                             |
+| [sequence_manifest.py](sequence_manifest.py)           | Run evidence, selected receipts, local replacement plans, revision checks and local ownership locks. Local planning states never imply publication.                                                   |
+| [sequence_aws.py](sequence_aws.py)                     | Injected sample-only Catalog reader with partition pushdown, complete sample metadata inventories and physical-schema checks. Tested with fake clients and local Spark.                               |
+| [sequence_s3.py](sequence_s3.py)                       | Injected S3 staging/read-back and conditional receipt/manifest adapters. Locally tested with fake S3 and real local Parquet; no real AWS staging performed. S3 run manifests stop at `READY_TO_PLAN`. |
+| [sequence_publication.py](sequence_publication.py)     | Increment 3A only: pure development publication plans, recovery evidence and simulated ordered journals. No copying, Catalog mutations, rollback execution or `PUBLISHED` success.                    |
+| [glue_sequence_job.py](glue_sequence_job.py)           | Offline configuration CLI and gated runtime/batch helpers. Cloud sequence-generation orchestration remains unfinished.                                                                                |
+| [glue_sample_preflight.py](glue_sample_preflight.py)   | Dedicated sample validation/candidate-profile entry point; release `_07` succeeded in real AWS run09. No pairs/triples or sequence outputs were generated.                                            |
+| [package_glue_modules.py](package_glue_modules.py)     | Deterministic allowlisted ZIP creation; no upload or dependency installation.                                                                                                                         |
+| [preflight_job_settings.md](preflight_job_settings.md) | Proposed runtime settings, argument behavior, evidence requirements and execution checklist. Current upload/deployment status is recorded below.                                                      |
+| [tests/](tests/)                                       | Synthetic fixtures, Spark regression checks, fake AWS clients, local Parquet tests and packaging/import checks.                                                                                       |
 
 Anchored processing publishes only sequences starting on D, although continuation transactions come from later dates. Starting links are restricted before triple expansion. Five explicit limits guard pair candidates, pair links, projected triples, expansion per middle transaction and output rows; exceeding a limit fails rather than dropping valid branches. No production thresholds have been established.
 
@@ -82,30 +88,30 @@ Staging validates written data before marking an attempt `VALIDATED`; `_SUCCESS`
 
 ## Existing AWS infrastructure and proposed outputs
 
-| Resource | Exact value | Status |
-|---|---|---|
-| Region | `us-east-1` | Existing group region |
-| Glue database | `is459_g2t1_aml` | Existing |
-| Source table | `is459_g2t1_aml.transactions_clean` | Existing Role 2 output |
-| Processed/source bucket | `is459-g2t1-aml-processed-bucket` | Existing |
-| Shared IAM role | `AWSGlueServiceRole-is459g2t1` | Existing; run09 exercised sample-read permissions, not sequence staging/publication permissions |
-| Script bucket/prefix | `s3://is459-g2t1-aml-athena-bucket/scripts/` | Existing team location |
-| Glue temporary prefix | `s3://is459-g2t1-aml-athena-bucket/glue-temp/` | Existing team location |
-| Dedicated preflight job | `is459-g2t1-bq2-sample-preflight` | Existing; release `_07` run09 **SUCCEEDED** |
-| Future sequence-builder job | `is459-g2t1-bq2-sequence-builder` | Intended name in integration helpers; not deployed |
+| Resource                    | Exact value                                    | Status                                                                                          |
+| --------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Region                      | `us-east-1`                                    | Existing group region                                                                           |
+| Glue database               | `is459_g2t1_aml`                               | Existing                                                                                        |
+| Source table                | `is459_g2t1_aml.transactions_clean`            | Existing Role 2 output                                                                          |
+| Processed/source bucket     | `is459-g2t1-aml-processed-bucket`              | Existing                                                                                        |
+| Shared IAM role             | `AWSGlueServiceRole-is459g2t1`                 | Existing; run09 exercised sample-read permissions, not sequence staging/publication permissions |
+| Script bucket/prefix        | `s3://is459-g2t1-aml-athena-bucket/scripts/`   | Existing team location                                                                          |
+| Glue temporary prefix       | `s3://is459-g2t1-aml-athena-bucket/glue-temp/` | Existing team location                                                                          |
+| Dedicated preflight job     | `is459-g2t1-bq2-sample-preflight`              | Existing; release `_07` run09 **SUCCEEDED**                                                     |
+| Future sequence-builder job | `is459-g2t1-bq2-sequence-builder`              | Intended name in integration helpers; not deployed                                              |
 
 Read the actual cleaned schema in [etl/schema_transactions_clean.md](../../etl/schema_transactions_clean.md), Role 2's [handoff](../../etl/README.md), and the [group infrastructure handoff](../../docs/ingestion-handoff.md). Input has 20 logical columns, partitioned by string `dataset` and `txn_date`. Always select a dataset; do not mix the sample with HI or LI. The builder now targets cleaned data, not the old raw-sample fallback.
 
 All paths below are under `s3://is459-g2t1-aml-processed-bucket/`:
 
-| Purpose | Table / relative prefix | Status |
-|---|---|---|
-| Clean input | `is459_g2t1_aml.transactions_clean`; `transactions_clean/dataset=sample/txn_date=<D>/` | Existing sample input |
-| Development output | `is459_g2t1_aml.bq2_sequences_dev`; `bq2_sequences_dev/` | Approved intended interface; not published |
-| Production output | `is459_g2t1_aml.bq2_sequences`; `bq2_sequences/` | Future HI/LI destination; not published |
-| Staging attempts | `bq2_sequences_staging/<run_id>/<attempt_id>/` | Adapter implemented; no real staging performed |
-| Development metadata | `bq2_sequences_metadata/development/` | Adapter/report design; no real evidence writes claimed |
-| Development versions | `bq2_sequences_dev_versions/<publication_id>/dataset=sample/start_date=<D>/` | Publication-planning layout only; future explicit Catalog partition locations |
+| Purpose              | Table / relative prefix                                                                | Status                                                                        |
+| -------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Clean input          | `is459_g2t1_aml.transactions_clean`; `transactions_clean/dataset=sample/txn_date=<D>/` | Existing sample input                                                         |
+| Development output   | `is459_g2t1_aml.bq2_sequences_dev`; `bq2_sequences_dev/`                               | Approved intended interface; not published                                    |
+| Production output    | `is459_g2t1_aml.bq2_sequences`; `bq2_sequences/`                                       | Future HI/LI destination; not published                                       |
+| Staging attempts     | `bq2_sequences_staging/<run_id>/<attempt_id>/`                                         | Adapter implemented; no real staging performed                                |
+| Development metadata | `bq2_sequences_metadata/development/`                                                  | Adapter/report design; no real evidence writes claimed                        |
+| Development versions | `bq2_sequences_dev_versions/<publication_id>/dataset=sample/start_date=<D>/`           | Publication-planning layout only; future explicit Catalog partition locations |
 
 The existing local replacement planner uses fixed canonical locations. The separate development publication planner supports versioned locations; executing that design and reconciling Catalog state remain future work. Staging/metadata stay outside queryable table roots. No development or production output table is claimed to exist from Role 5 work.
 
@@ -113,10 +119,10 @@ The existing local replacement planner uses fixed canonical locations. The separ
 
 **Current release:** `sample_preflight_20261105_07`, packaged from committed `main` at `f9b182e748faf3f8d2f545b7603cf80441aef8a5`. Ji Ning confirms both artifacts were uploaded and the existing Glue job now references this script and ZIP. Release `_07` successfully executed in AWS as run09 after both release artifacts were verified and the job configuration was updated via AWS CLI without overwriting the corrected script. Earlier runs are recorded below.
 
-| Artifact | Uploaded S3 URI |
-|---|---|
+| Artifact    | Uploaded S3 URI                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
 | Main script | `s3://is459-g2t1-aml-athena-bucket/scripts/role5/sample_preflight_20261105_07/glue_sample_preflight.py` |
-| Modules ZIP | `s3://is459-g2t1-aml-athena-bucket/scripts/role5/sample_preflight_20261105_07/role5_modules.zip` |
+| Modules ZIP | `s3://is459-g2t1-aml-athena-bucket/scripts/role5/sample_preflight_20261105_07/role5_modules.zip`        |
 
 Recorded SHA-256 values supplied with the release:
 
@@ -148,11 +154,11 @@ The entry script is selected separately in Glue; the ZIP is supplied through Pyt
 
 Reported Ubuntu WSL2 results using Python 3.11, Java 17 and PySpark 3.5.4:
 
-| Check | Result |
-|---|---|
+| Check                            | Result                           |
+| -------------------------------- | -------------------------------- |
 | Complete Role 5 regression suite | **182 passed for release `_07`** |
-| Sample-preflight tests | **41 passed** |
-| Glue entry-point/packaging suite | **9 passed** |
+| Sample-preflight tests           | **41 passed**                    |
+| Glue entry-point/packaging suite | **9 passed**                     |
 
 These are local results, including fake AWS clients and real local Spark/Parquet fixtures. They do not verify live AWS permissions, Glue argument injection, the real S3 connector or current sample data quality. Earlier Windows worker/filesystem problems motivated Ubuntu testing; no random Windows Hadoop binaries are required by this workflow.
 
@@ -177,33 +183,33 @@ Packaging performs no upload. Keep virtual environments, credentials, transactio
 
 Release `sample_preflight_20261105_07` completed the real sample preflight successfully. Verified run09 evidence:
 
-| Validation evidence | Run09 result |
-|---|---|
-| Job / region | `is459-g2t1-bq2-sample-preflight` / `us-east-1` |
-| Application Run ID | `sample_preflight_20261105_run09` |
-| AWS JobRunId | `jr_6cc9cc1dc06ef48480158bddfdee3348b0450ef9e4f35ff4337ea88c92a34dc3` |
-| AWS Glue job status | **`SUCCEEDED`** |
-| CloudWatch `PREFLIGHT` status / phase | **`VALIDATED_READ_ONLY` / `complete`** |
-| Sample transactions / laundering-labelled transactions | **500,000 / 35** |
-| Date coverage | All six dates: `2022-09-01` through `2022-09-06` |
-| Schema and timestamps | Physical schema and UTC timestamp consistency passed |
-| Runtime | Glue 5.0; Spark `3.5.4-amzn-0`; Python `3.11.15`; Java `17.0.20` |
-| Source consistency | Before/after source, table and partition fingerprints matched |
-| Conservative pair-candidate upper bound | **751,390**; not an actual pair count |
-| Validation elapsed time | **96.553 seconds**; not total job or billed runtime |
-| Materialized sequences | **No pairs or triples materialized** |
-| Report storage | JSON evidence in CloudWatch only; **no S3 report written** |
-| Identity verification scope | Provided sample DataFrame only; dataset-wide identity was **not verified beyond that frame** |
+| Validation evidence                                    | Run09 result                                                                                 |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Job / region                                           | `is459-g2t1-bq2-sample-preflight` / `us-east-1`                                              |
+| Application Run ID                                     | `sample_preflight_20261105_run09`                                                            |
+| AWS JobRunId                                           | `jr_6cc9cc1dc06ef48480158bddfdee3348b0450ef9e4f35ff4337ea88c92a34dc3`                        |
+| AWS Glue job status                                    | **`SUCCEEDED`**                                                                              |
+| CloudWatch `PREFLIGHT` status / phase                  | **`VALIDATED_READ_ONLY` / `complete`**                                                       |
+| Sample transactions / laundering-labelled transactions | **500,000 / 35**                                                                             |
+| Date coverage                                          | All six dates: `2022-09-01` through `2022-09-06`                                             |
+| Schema and timestamps                                  | Physical schema and UTC timestamp consistency passed                                         |
+| Runtime                                                | Glue 5.0; Spark `3.5.4-amzn-0`; Python `3.11.15`; Java `17.0.20`                             |
+| Source consistency                                     | Before/after source, table and partition fingerprints matched                                |
+| Conservative pair-candidate upper bound                | **751,390**; not an actual pair count                                                        |
+| Validation elapsed time                                | **96.553 seconds**; not total job or billed runtime                                          |
+| Materialized sequences                                 | **No pairs or triples materialized**                                                         |
+| Report storage                                         | JSON evidence in CloudWatch only; **no S3 report written**                                   |
+| Identity verification scope                            | Provided sample DataFrame only; dataset-wide identity was **not verified beyond that frame** |
 
 Matching inventories are change-detection evidence, not a transactional snapshot or proof of full-dataset coverage. The successful sample preflight does not complete sequence generation, staging or publication.
 
 ### Deployment history
 
-| Run | Outcome |
-|---|---|
-| Run06, release `_06` | Real sample validation passed (`VALIDATED_READ_ONLY`, `phase=complete`), but Glue marked the job **Failed** because the entry-point guard raised `SystemExit(0)`. |
-| Runs07 and 08, release `_07` deployment attempts | **Failed** because the deployed S3 entry-point script contained outdated exit-handling code. |
-| Run09, release `_07` | **SUCCEEDED** after verifying both release artifacts and updating the job configuration via AWS CLI without overwriting the corrected script. |
+| Run                                              | Outcome                                                                                                                                                           |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run06, release `_06`                             | Real sample validation passed (`VALIDATED_READ_ONLY`, `phase=complete`), but Glue marked the job **Failed** because the entry-point guard raised `SystemExit(0)`. |
+| Runs07 and 08, release `_07` deployment attempts | **Failed** because the deployed S3 entry-point script contained outdated exit-handling code.                                                                      |
+| Run09, release `_07`                             | **SUCCEEDED** after verifying both release artifacts and updating the job configuration via AWS CLI without overwriting the corrected script.                     |
 
 Release `_07` returns normally on success while preserving nonzero failures and exceptions. It was packaged from commit `f9b182e748faf3f8d2f545b7603cf80441aef8a5` and passed 182 Ubuntu tests. Run09 used the artifact paths and ZIP fingerprint recorded above with `--RUN_ID=sample_preflight_20261105_run09`.
 
@@ -222,17 +228,17 @@ Proposed settings: **Glue 5.0 / Spark 3.5.4 / Python 3.11 / Java 17; 2 G.1X work
 
 Required execution arguments:
 
-| Argument | Required value / evidence |
-|---|---|
-| `--EXPECTED_ACCOUNT_ID` | Confirmed 12-digit group account ID |
-| `--RUN_ID` | Fresh safe run identifier |
-| `--TIMEZONE_EVIDENCE` | Reference to Amareet's UTC parsing confirmation |
-| `--NO_REFRESH_ACKNOWLEDGED` | `true` |
-| `--NO_REFRESH_EVIDENCE` | Renewed no-refresh coordination reference |
-| `--BUILDER_FINGERPRINT` | ZIP SHA-256 for the exact uploaded release |
-| `--DATASET` | `sample`; other datasets rejected |
-| `--REGION` | `us-east-1`; other regions rejected |
-| `--ALLOW_AWS_READS` | Literal lowercase `true` for real AWS reads |
+| Argument                    | Required value / evidence                       |
+| --------------------------- | ----------------------------------------------- |
+| `--EXPECTED_ACCOUNT_ID`     | Confirmed 12-digit group account ID             |
+| `--RUN_ID`                  | Fresh safe run identifier                       |
+| `--TIMEZONE_EVIDENCE`       | Reference to Amareet's UTC parsing confirmation |
+| `--NO_REFRESH_ACKNOWLEDGED` | `true`                                          |
+| `--NO_REFRESH_EVIDENCE`     | Renewed no-refresh coordination reference       |
+| `--BUILDER_FINGERPRINT`     | ZIP SHA-256 for the exact uploaded release      |
+| `--DATASET`                 | `sample`; other datasets rejected               |
+| `--REGION`                  | `us-east-1`; other regions rejected             |
+| `--ALLOW_AWS_READS`         | Literal lowercase `true` for real AWS reads     |
 
 Missing/false activation produces offline `NOT_RUN` output with `preflight_completed=false`. Glue-shaped invocations with a supplied job name/ID return exit code 2 when activation is absent; a missing flag must never be reported as a successful real preflight. Malformed/duplicate activation and unknown Role 5 arguments are rejected.
 
@@ -242,17 +248,17 @@ A real successful validation must include a `VALIDATED_READ_ONLY` report with ma
 
 ## Deployment status
 
-| Milestone | Status |
-|---|---|
-| Local builder, validation, batch and staging tests | COMPLETED locally |
-| Preflight Python script and ZIP uploaded to S3 | **COMPLETED**, release recorded above |
-| Dedicated preflight Glue job created | **COMPLETED**; existing job configured for `_07` |
-| Real sample validation evidence | Run09: `VALIDATED_READ_ONLY`, `phase=complete`; 500,000 transactions and 35 laundering labels |
-| Release `_07` AWS execution | **COMPLETED**: run09 Glue status `SUCCEEDED` |
-| Real BQ2 sequence generation | **NOT YET** |
-| HI-Medium/LI-Medium processing by Role 5 | **NOT YET** |
-| Catalog table publication | **NOT YET** |
-| Publication preparation/copying, Catalog switching and rollback execution | **NOT YET**; only pure planning/journal logic exists |
+| Milestone                                                                 | Status                                                                                        |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Local builder, validation, batch and staging tests                        | COMPLETED locally                                                                             |
+| Preflight Python script and ZIP uploaded to S3                            | **COMPLETED**, release recorded above                                                         |
+| Dedicated preflight Glue job created                                      | **COMPLETED**; existing job configured for `_07`                                              |
+| Real sample validation evidence                                           | Run09: `VALIDATED_READ_ONLY`, `phase=complete`; 500,000 transactions and 35 laundering labels |
+| Release `_07` AWS execution                                               | **COMPLETED**: run09 Glue status `SUCCEEDED`                                                  |
+| Real BQ2 sequence generation                                              | **NOT YET**                                                                                   |
+| HI-Medium/LI-Medium processing by Role 5                                  | **NOT YET**                                                                                   |
+| Catalog table publication                                                 | **NOT YET**                                                                                   |
+| Publication preparation/copying, Catalog switching and rollback execution | **NOT YET**; only pure planning/journal logic exists                                          |
 
 Any further paid execution requires separate approval and coordination with Sonia, a renewed no-refresh agreement and review of saved job settings. Do not run the shared Step Functions pipeline for the first sample test: its current ETL argument selects HI-Medium. No full-data runtime or final growth thresholds are known.
 
@@ -260,17 +266,17 @@ Any further paid execution requires separate approval and coordination with Soni
 
 The repository's [state-machine definition](../../ingestion/stepfunctions/is459-g2t1-pipeline.asl.json) still has a Role 5 placeholder. This handoff describes future integration, not a deployed state.
 
-| Field | Dedicated preflight | Future BQ2 sequence workflow |
-|---|---|---|
-| Job type | Existing dedicated Glue Spark job | Planned Glue Spark workflow |
-| Exact name | `is459-g2t1-bq2-sample-preflight` (release `_07` run09 succeeded) | Intended `is459-g2t1-bq2-sequence-builder`; final runnable orchestration awaiting completion |
-| Integration | Potential `arn:aws:states:::glue:startJobRun.sync`; standalone sample preflight succeeded, shared integration remains planned | Intended `.sync` task after source readiness and publication completion logic are verified |
-| Inputs/dependencies | Cleaned sample, timezone evidence, current no-refresh agreement, tested release | Cleaned dataset, dataset-wide validation, consistent source inventory, confirmed coverage and measured limits |
-| Output table | None; validation/profile logs only | Intended `bq2_sequences_dev` first, then `bq2_sequences` after separate validation/approval |
-| Output path | Design-only metadata URI; no report S3 writes | Proposed processed-bucket paths above; versioned development publication still requires implementation |
-| Dataset arguments | `sample` only, explicit read activation | Future HI/LI orchestration requires Sonia's coordination; initial integration helpers remain sample/development-only |
-| Runtime and cost | Validation elapsed: 96.553 seconds; total billed runtime/cost not recorded | Full-data runtime/cost unknown |
-| Downstream gate | Validated evidence; does not supply Role 6's sequence table | Role 6 queries only after independently verified publication and reader coordination |
+| Field               | Dedicated preflight                                                                                                           | Future BQ2 sequence workflow                                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Job type            | Existing dedicated Glue Spark job                                                                                             | Planned Glue Spark workflow                                                                                          |
+| Exact name          | `is459-g2t1-bq2-sample-preflight` (release `_07` run09 succeeded)                                                             | Intended `is459-g2t1-bq2-sequence-builder`; final runnable orchestration awaiting completion                         |
+| Integration         | Potential `arn:aws:states:::glue:startJobRun.sync`; standalone sample preflight succeeded, shared integration remains planned | Intended `.sync` task after source readiness and publication completion logic are verified                           |
+| Inputs/dependencies | Cleaned sample, timezone evidence, current no-refresh agreement, tested release                                               | Cleaned dataset, dataset-wide validation, consistent source inventory, confirmed coverage and measured limits        |
+| Output table        | None; validation/profile logs only                                                                                            | Intended `bq2_sequences_dev` first, then `bq2_sequences` after separate validation/approval                          |
+| Output path         | Design-only metadata URI; no report S3 writes                                                                                 | Proposed processed-bucket paths above; versioned development publication still requires implementation               |
+| Dataset arguments   | `sample` only, explicit read activation                                                                                       | Future HI/LI orchestration requires Sonia's coordination; initial integration helpers remain sample/development-only |
+| Runtime and cost    | Validation elapsed: 96.553 seconds; total billed runtime/cost not recorded                                                    | Full-data runtime/cost unknown                                                                                       |
+| Downstream gate     | Validated evidence; does not supply Role 6's sequence table                                                                   | Role 6 queries only after independently verified publication and reader coordination                                 |
 
 Do not replace the sequence-builder placeholder with a preflight that merely exits successfully. The real sequence workflow and table publication must work before the BQ2 analytics dependency can be satisfied.
 

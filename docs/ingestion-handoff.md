@@ -114,14 +114,30 @@ is459-g2t1-aml-processed-bucket/
 | Safety         | Only works on `is459-g2t1-aml-processed-bucket`, and only on folder prefixes ending in `/`           |
 | Used by        | `BQ1_ResetOutputs` step (Role 3 tables). Reusable for Role 6                                         |
 
+BQ2 never drops live data: it builds the copy that `bq2_sequences` does not point to, and switches the view only after every gate passes. A failed run leaves the live copy untouched. See `bq2/sequences/athena/README.md`.
+
+**BQ2 control Lambda**
+
+| Item           | Value                                                                                                                                             |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Function       | `is459-g2t1-bq2-control`                                                                                                                          |
+| Runtime        | Python 3.12, handler `lambda_function.lambda_handler`, zip of `lambda_function.py` and `generate_sql.py`                                          |
+| Timeout        | 5 minutes                                                                                                                                         |
+| Execution role | `is459-g2t1-bq2-control-role-*`, basic execution plus inline `is459-g2t1-bq2-control-policy`                                                      |
+| Actions        | `lock` (one pipeline run at a time), `plan` (which copy is live, build the other), `reset` (empty the build copy), `render` (SQL per dataset-day) |
+| Safety         | Refuses to reset the live copy. Can only drop `bq2_sequences_a`/`_b` and empty `bq2_sequences/` or `bq2_sequences_b/`                             |
+| Code           | `bq2/sequences/athena/control_lambda/` (policy in `policy.json`)                                                                                  |
+
 ### 2.6 Step Functions
 
-| Item           | Value                                                                                                                   |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| State machine  | `is459-g2t1-pipeline` (Standard)                                                                                        |
-| Execution role | Auto-created, with `AWSGlueConsoleFullAccess`, `AWSLambdaRole`, `AmazonAthenaFullAccess`, `AmazonS3FullAccess` attached |
-| Input          | `{}`                                                                                                                    |
-| Last run       | 2 Nov 2026, Succeeded (ETL and BQ1 live)                                                                                |
+| Item           | Value                                                                                                                     |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| State machine  | `is459-g2t1-pipeline` (Standard)                                                                                          |
+| Execution role | Auto-created, with `AWSGlueConsoleFullAccess`, `AWSLambdaRole`, `AmazonAthenaFullAccess`, `AmazonS3FullAccess` attached   |
+| Input          | `{}`                                                                                                                      |
+| Last run       | 9 Nov 2026, `9thrun_fixedbq2sequences` (ETL, BQ1, Role 4 graph, gated BQ2 build: 113/113 gates passed)                    |
+| Concurrency    | `PipelineLock` (first state) stops a run while an earlier execution is still running                                      |
+| BQ2 output     | `bq2_sequences` is a **view** on `bq2_sequences_a` or `bq2_sequences_b`. Query the view, never write to `_a`/`_b` by hand |
 
 ### 2.7 EC2 (ingestion, shared Neo4j host)
 
@@ -146,6 +162,7 @@ is459-g2t1-aml-processed-bucket/
 | `is459-g2t1-ec2-s3-role`            | EC2 instance (ingest, now Neo4j)            | `AmazonS3FullAccess`, `AmazonSSMManagedInstanceCore`, inline `is459-g2t1-neo4j-athena-glue` (Athena on primary workgroup; Glue read, create, update, delete tables in is459_g2t1_aml) |
 | `is459-g2t1-reset-outputs-role-*`   | Reset outputs Lambda                        | Basic execution, `AmazonS3FullAccess`, `AWSGlueConsoleFullAccess`                                                                                                                     |
 | Step Functions auto-created role    | State machine                               | `AWSGlueConsoleFullAccess`, `AWSLambdaRole`, `AmazonAthenaFullAccess`, `AmazonS3FullAccess`                                                                                           |
+| `is459-g2t1-bq2-control-role-*`     | BQ2 control Lambda                          | Basic execution, inline `is459-g2t1-bq2-control-policy` (Glue get/delete on the BQ2 tables, S3 list/delete on the two copy folders, `states:ListExecutions` on the pipeline)          |
 
 > **Note for Roles 2 to 6:** `AWSGlueServiceRole-is459g2t1` can read and write S3. Use it as the IAM role for your Glue jobs. Write outputs only to `is459-g2t1-aml-processed-bucket`.
 
@@ -172,6 +189,7 @@ is459-g2t1-aml-processed-bucket/
 - **HI-Medium date range:** 2022-09-01 00:00 to 2022-09-28 15:58
 - **HI-Medium rows:** 31,898,238
 - **Sample:** first 500,000 rows of HI-Medium, a contiguous slice in time so 24h chains and multi-hop paths stay intact
+- `transactions_clean` is partitioned by `dataset`; an ETL run replaces only its own dataset's partition (verified 7 Nov: HI rewrite left LI from 1 Nov intact).
 
 ### 3.2 Rates (`raw_fx`, `raw_btc`)
 
@@ -206,13 +224,17 @@ amount_usd = amount / units_per_usd
 ## 4. Pipeline (Step Functions)
 
 ```
-FetchRates (Lambda)
+PipelineLock (Lambda: stop if an earlier execution is running)
+  → FetchRates (Lambda)
   → StartRatesCrawler → Wait 20s → GetCrawlerState → loop until READY
-  → ETL_TransactionsClean            [LIVE: Glue is459-g2t1-etl-transactions-clean, ~18 min, stops pipeline on DQ failure]
+  → ETL_TransactionsClean            [LIVE: Glue is459-g2t1-etl-transactions-clean, stops pipeline on DQ failure]
   → Parallel:
-       BQ1: ResetOutputs (Lambda) → [Step 1 ‖ Step 2a] → Step 2b → Step 3   [LIVE: Role 3 Athena CTAS]
-            → BQ1_Neo4jLoad          [Role 4 placeholder]
-       BQ2_SequenceBuilder → BQ2_LiftAnalysis  [Role 5, Role 6 placeholders]
+       BQ1: ResetOutputs → [DirectCorridors ‖ AttemptBanks] → SharedAttemptValue → CorridorsRanked   [LIVE: Role 3 Athena]
+       Graph: start EC2 if needed → SSM run_graph (Neo4j) → check receipt → update _latest view → stop EC2   [LIVE: Role 4]
+       BQ2: Plan → source gate → reset build copy → create → Map 55 dataset-days (pairs, triples, day gate)
+            → structure gate → source gate (unchanged) → publish view   [LIVE: Role 5 Athena]
+            → BQ2_LiftAnalysis   [Role 6 placeholder]
+  → BQ1_PriorityReset → BQ1_PriorityList   [LIVE: Role 3 + Role 4 features]
   → PipelineComplete
 ```
 

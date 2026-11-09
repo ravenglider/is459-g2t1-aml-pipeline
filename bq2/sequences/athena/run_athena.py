@@ -1,8 +1,12 @@
 """Run every statement of a generated .sql file in Athena, in order, one at a time.
 
+For manual checks only. The production table is built by the Step Functions pipeline, which is the
+only writer of bq2_sequences_a / bq2_sequences_b.
+
 Built for AWS CloudShell (boto3 is preinstalled, credentials come from the console login):
-    python3 run_athena.py 02_build_daily.sql
-    python3 run_athena.py 02_build_daily.sql --start 37   # resume at statement 37 after a failure
+    python3 run_athena.py 00_preflight.sql
+    python3 run_athena.py 04_day_checks.sql --evidence evidence/acceptance.md   # also record results
+    python3 run_athena.py 04_day_checks.sql --start 37   # resume at statement 37
 
 Stops at the first failed statement and prints its number, so a rerun can resume there.
 SELECT results (preflight, acceptance) are printed as rows.
@@ -10,6 +14,8 @@ SELECT results (preflight, acceptance) are printed as rows.
 import argparse
 import sys
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 import boto3
 
@@ -56,6 +62,7 @@ def main():
     ap.add_argument("sql_file")
     ap.add_argument("--start", type=int, default=1, help="statement number to start from (1-based)")
     ap.add_argument("--force", action="store_true", help="run even if other queries are still running")
+    ap.add_argument("--evidence", help="append each statement's query id, timing and result rows to this markdown file")
     args = ap.parse_args()
     client = boto3.client("athena", region_name=REGION)
     busy = busy_queries(client)
@@ -68,6 +75,11 @@ def main():
         sys.exit(1)
     stmts = statements(args.sql_file)
     total_gb = 0.0
+    ev = None
+    if args.evidence:
+        Path(args.evidence).parent.mkdir(parents=True, exist_ok=True)
+        ev = open(args.evidence, "a", encoding="utf-8")
+        ev.write(f"\n## {args.sql_file}, run {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC\n\n")
     for i, (label, sql, is_query) in enumerate(stmts, 1):
         if i < args.start:
             continue
@@ -79,15 +91,28 @@ def main():
         total_gb += gb
         state = q["Status"]["State"]
         print(f"    {state} in {time.time() - t0:.0f}s, scanned {gb:.2f} GB (query id {qid})", flush=True)
+        if ev:
+            ev.write(f"**[{i}/{len(stmts)}] {label}**: {state} in {time.time() - t0:.0f}s, "
+                     f"scanned {gb:.2f} GB, query id `{qid}`\n\n")
         if state != "SUCCEEDED":
             print("    reason:", q["Status"].get("StateChangeReason", "unknown"))
             print(f"Stopped. Fix the cause, then rerun with --start {i}")
             sys.exit(1)
         if is_query:
             rows = client.get_query_results(QueryExecutionId=qid)["ResultSet"]["Rows"]
-            for r in rows[:50]:
-                print("    " + " | ".join(c.get("VarCharValue", "") for c in r["Data"]))
+            table = [[c.get("VarCharValue", "") for c in r["Data"]] for r in rows[:50]]
+            for r in table:
+                print("    " + " | ".join(r))
+            if ev and table:
+                ev.write("| " + " | ".join(table[0]) + " |\n|" + "---|" * len(table[0]) + "\n")
+                for r in table[1:]:
+                    ev.write("| " + " | ".join(r) + " |\n")
+                ev.write("\n")
+                ev.flush()
     print(f"Done. Total scanned {total_gb:.2f} GB, about USD {total_gb / 1000 * 5:.2f}")
+    if ev:
+        ev.write(f"Total scanned {total_gb:.2f} GB, about USD {total_gb / 1000 * 5:.2f}\n")
+        ev.close()
 
 
 if __name__ == "__main__":

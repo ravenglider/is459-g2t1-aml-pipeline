@@ -83,3 +83,35 @@ chains AS (
   WHERE tc.txn_id <> p.a_id AND tc.txn_id <> p.b_id
 )
 SELECT (SELECT COUNT(*) FROM pairs) AS pairs, (SELECT COUNT(*) FROM chains) AS triples;
+
+-- 4. Source contract enforced by the pipeline and by run_athena.py before and after every build.
+-- source_ok must be true.
+WITH s AS (
+SELECT
+  COUNT_IF(dataset = 'HI-Medium') AS hi_rows,
+  COUNT(DISTINCT CASE WHEN dataset = 'HI-Medium' THEN txn_id END) AS hi_ids,
+  COUNT(DISTINCT CASE WHEN dataset = 'HI-Medium' THEN txn_date END) AS hi_days,
+  min(CASE WHEN dataset = 'HI-Medium' THEN txn_date END) AS hi_first,
+  max(CASE WHEN dataset = 'HI-Medium' THEN txn_date END) AS hi_last,
+  COUNT_IF(dataset = 'LI-Medium') AS li_rows,
+  COUNT(DISTINCT CASE WHEN dataset = 'LI-Medium' THEN txn_id END) AS li_ids,
+  COUNT(DISTINCT CASE WHEN dataset = 'LI-Medium' THEN txn_date END) AS li_days,
+  min(CASE WHEN dataset = 'LI-Medium' THEN txn_date END) AS li_first,
+  max(CASE WHEN dataset = 'LI-Medium' THEN txn_date END) AS li_last,
+  lower(to_hex(sha256(to_utf8(array_join(array_sort(array_agg(DISTINCT "$path" || ':' || CAST("$file_size" AS varchar) || ':' || CAST("$file_modified_time" AS varchar))), '|'))))) AS source_fingerprint
+FROM is459_g2t1_aml.transactions_clean
+WHERE dataset IN ('HI-Medium', 'LI-Medium')
+)
+SELECT CASE WHEN hi_rows = 31898218
+   AND hi_ids = 31898218
+   AND hi_days = 28
+   AND hi_first = '2022-09-01'
+   AND hi_last = '2022-09-28'
+   AND li_rows = 31251469
+   AND li_ids = 31251469
+   AND li_days = 27
+   AND li_first = '2022-09-01'
+   AND li_last = '2022-09-27' THEN 'true' ELSE 'false' END AS source_ok,
+  'Found ' || 'HI: ' || CAST(hi_rows AS varchar) || ' rows, ' || CAST(hi_ids AS varchar) || ' ids, ' || CAST(hi_days AS varchar) || ' days ' || coalesce(hi_first, '?') || ' to ' || coalesce(hi_last, '?') || '. ' || 'LI: ' || CAST(li_rows AS varchar) || ' rows, ' || CAST(li_ids AS varchar) || ' ids, ' || CAST(li_days AS varchar) || ' days ' || coalesce(li_first, '?') || ' to ' || coalesce(li_last, '?') || '. ' || 'Expected HI-Medium: 31898218 rows, 28 days 2022-09-01 to 2022-09-28. LI-Medium: 31251469 rows, 27 days 2022-09-01 to 2022-09-27.' AS detail,
+  source_fingerprint
+FROM s;

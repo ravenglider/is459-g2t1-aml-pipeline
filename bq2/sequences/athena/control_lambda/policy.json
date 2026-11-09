@@ -1,0 +1,45 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadViewAndDropBuildCopy",
+      "Effect": "Allow",
+      "Action": ["glue:GetTable", "glue:DeleteTable"],
+      "Resource": [
+        "arn:aws:glue:us-east-1:536697253251:catalog",
+        "arn:aws:glue:us-east-1:536697253251:database/is459_g2t1_aml",
+        "arn:aws:glue:us-east-1:536697253251:table/is459_g2t1_aml/bq2_sequences",
+        "arn:aws:glue:us-east-1:536697253251:table/is459_g2t1_aml/bq2_sequences_a",
+        "arn:aws:glue:us-east-1:536697253251:table/is459_g2t1_aml/bq2_sequences_b"
+      ]
+    },
+    {
+      "Sid": "ListProcessedBucket",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::is459-g2t1-aml-processed-bucket",
+      "Condition": {"StringLike": {"s3:prefix": ["bq2_sequences/*", "bq2_sequences_b/*"]}}
+    },
+    {
+      "Sid": "EmptyBuildCopyFolders",
+      "Effect": "Allow",
+      "Action": "s3:DeleteObject",
+      "Resource": [
+        "arn:aws:s3:::is459-g2t1-aml-processed-bucket/bq2_sequences/*",
+        "arn:aws:s3:::is459-g2t1-aml-processed-bucket/bq2_sequences_b/*"
+      ]
+    },
+    {
+      "Sid": "PipelineLock",
+      "Effect": "Allow",
+      "Action": "states:ListExecutions",
+      "Resource": "arn:aws:states:us-east-1:536697253251:stateMachine:is459-g2t1-pipeline"
+    },
+    {
+      "Sid": "PipelineLockDescribe",
+      "Effect": "Allow",
+      "Action": "states:DescribeExecution",
+      "Resource": "arn:aws:states:us-east-1:536697253251:execution:is459-g2t1-pipeline:*"
+    }
+  ]
+}
