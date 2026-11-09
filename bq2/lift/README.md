@@ -112,3 +112,5 @@ Final Sankey grouped reconciliation passed for all four HI/LI and pair/triple sc
 Final Sankey CSV validated: 522 unique rows, correct ordered method fields and reconciled counts across all four scopes. Final lift CSV and Tableau updates remain pending.
 
 All four final support-100 CSV exports have now been checked: lift, trade-off, robustness and Sankey. Lift rankings/formulas and the cross-export comparisons passed. Final Tableau updates, packaging and automation handoff remain pending.
+
+Final Tableau HI–LI robustness dashboard captured for [pairs](../../viz/screenshots/35-final-robustness-pairs.png) and [triples](../../viz/screenshots/36-final-robustness-triples.png). Visible values match the checked export. Final HI dashboard screenshots, native workbook save/reopen verification and automation handoff remain pending.

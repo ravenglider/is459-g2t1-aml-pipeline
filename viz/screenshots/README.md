@@ -25,3 +25,13 @@ Evidence is supported by the checked local CSV exports and [Role 6 run record](.
 ## Remaining delivery
 
 The sample targeted checklist is rendered and its visible top-3 pair values match the validated lift export. Xiang Ying reports testing checklist top-3/5/10 and length switching; the dashboard screenshot additionally shows the expected top-5 pairs. This is user-reported interactive acceptance, not an independent replay. Both combined sample dashboards are captured; inspection/delivery of the current native workbook remains pending; local CSVs/extracts are not committed. Final HI/LI outputs, frozen HI-rule evaluation on LI and final recommendations remain separate work. See the [Tableau build guide](../bq2_tableau.md).
+
+
+## Final HI–LI robustness dashboard — 9 November 2026
+
+The following final-data screenshots are separate from the sample evidence above:
+
+- [35: selected pairs](35-final-robustness-pairs.png): ten frozen HI-ranked pair patterns, minimum support 100, with HI/LI support and lift. All ten retain LI lift above 1; ACH -> ACH declines from 8.51 to 2.23.
+- [36: selected triples](36-final-robustness-triples.png): ten frozen HI-ranked triple patterns at the same cutoff. Eight retain LI lift above 1; ACH -> ACH -> Cheque (0.99) and ACH -> ACH -> Cash (0.92) fall below the LI baseline.
+
+Visible ranks, supports and rounded lifts match the validated final robustness CSV. The caption correctly uses each datasets own sequence baseline. Above-baseline lift is a descriptive comparison, not statistical significance or production validation. Both dropdown states are evidenced by screenshots; save/reopen acceptance of the native workbook remains pending. Images copied byte-for-byte from Desktop; originals retained.
