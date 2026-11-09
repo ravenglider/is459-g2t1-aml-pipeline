@@ -38,3 +38,5 @@ The result crops do not display full SQL, account/region or query execution IDs.
 [27-final-lift-created.png](27-final-lift-created.png): final lift CTAS completed successfully. Runtime 6.882 sec, queue 139 ms, scanned 1.74 GB; result reuse off. SQL attribution from walkthrough; query ID not supplied. Output totals/rankings require subsequent checks.
 
 [28-final-lift-totals.png](28-final-lift-totals.png): four dataset/length groups from final bq2_lift, selecting min_support 100 only. Runtime 548 ms, queue 95 ms, scanned 8.93 KB. Baselines independently recomputed from the displayed positive/total counts; upstream acceptance comparison remains pending receipt availability.
+
+[29-final-tradeoff-helper-check.png](29-final-tradeoff-helper-check.png): twelve dataset/length/cutoff groups; helper rows equal distinct final IDs in each group, rank extrema 1/10. Runtime 5.026 sec, queue 82 ms, scanned 422.89 MB; query ID not supplied.

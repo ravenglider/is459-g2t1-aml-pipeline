@@ -173,3 +173,10 @@ Next: inspect counts and positive-chain baselines by dataset/length using one mi
 | LI-Medium | 3 | 218 | 769,082,499 | 1,425,484 | 0.185349 |
 
 All four baseline values independently recompute as positive_sequences / total_sequences to floating-point tolerance. Total occurrence count across groups is 2,871,801,105, not distinct transactions. Positive sequences use any_laundering, may overlap and are not final-transaction target counts. These are downstream aggregate observations, not an independent replay of upstream sequence construction. Formal upstream acceptance receipts were still absent under bq2/sequences/athena/evidence/ on origin/main at this check; compare counts when supplied. Runtime 548 ms, queue 95 ms, scanned 8.93 KB; query ID and CSV not supplied. Screenshot copied byte-for-byte, Desktop original retained. Next: create final trade-off output using frozen HI-ranked patterns evaluated on both datasets.
+
+
+## Resource recovery and final trade-off helper — 9 November 2026
+
+User reports original tradeoff.sql exhausted resources. Reviewed teammate-supplied two-stage/weekly alternatives; thirteen local regression tests pass, including equivalence to original calculations and global weekly deduplication. No cloud cleanup was performed here. See [recovery instructions](recovery/README.md).
+
+Xiang Ying reports normal Stage 1 CTAS plus HI-triple, LI-pair and LI-triple INSERTs completed. [Own helper check](screenshots/29-final-tradeoff-helper-check.png) shows distinct finals per cutoff (same counts separately at 50/100/500): HI pairs 6,340,073; HI triples 2,414,516; LI pairs 6,193,755; LI triples 2,357,105. All twelve groups have helper_rows=distinct_final_transactions and rank extrema 1/10. Equal counts across cutoffs alone do not establish identical membership. Do not add across cutoff/length scopes. Runtime 5.026 sec, queue 82 ms, scanned 422.89 MB; query ID not supplied. Screenshot copied byte-for-byte from Desktop, original retained. Next: Stage 2 CTAS and final reconciliation. No weekly fallback or successful final trade-off CTAS is claimed yet.

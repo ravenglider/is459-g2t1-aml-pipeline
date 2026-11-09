@@ -206,5 +206,58 @@ class AnalyticsSQLTests(unittest.TestCase):
         self.assertEqual(results[3][0]['laundering_transactions'], 201)
 
 
+    def test_two_stage_and_weekly_tradeoffs_match_original(self):
+        self.fixture()
+        # More than ten eligible patterns; overlapping finals and positive chains
+        # ending in legitimate transfers must survive both rewrites unchanged.
+        for i in range(11):
+            self.add_pattern('HI-Medium', f'Extra{i:02d} -> Wire', 100,
+                             int(i % 2 == 0), 20 + i, i % 2,
+                             start=10000 + i * 200)
+        self.add_pattern('HI-Medium', 'Cash -> Wire -> ACH', 100, 1, 1, 0,
+                         length=3, start=20000)
+        self.add_pattern('LI-Medium', 'Cash -> Wire -> ACH', 100, 0, 1, 0,
+                         length=3, start=21000)
+        self.db.execute("ALTER TABLE bq2_sequences ADD COLUMN start_date TEXT")
+        hi_days = ['01', '07', '08', '14', '15', '21', '22', '27', '28']
+        li_days = hi_days[:-1]
+        for row in self.db.execute('SELECT rowid, dataset FROM bq2_sequences').fetchall():
+            days = li_days if row['dataset'] == 'LI-Medium' else hi_days
+            self.db.execute('UPDATE bq2_sequences SET start_date=? WHERE rowid=?',
+                            ('2022-09-' + days[row['rowid'] % len(days)], row['rowid']))
+        self.run_sql('bq2_lift.sql')
+        self.run_sql('tradeoff.sql')
+        query = 'SELECT * FROM bq2_tradeoff ORDER BY dataset, sequence_length, min_support, top_n'
+        expected = [tuple(row) for row in self.db.execute(query)]
+        self.assertEqual(len(expected), 48)
+        normal = (SQL_DIR / 'recovery/bq2_tradeoff_two_stage.sql').read_text()
+        weekly = (SQL_DIR / 'recovery/bq2_tradeoff_stage1_weekly_fallback.sql').read_text()
+        stage2 = normal[normal.index('-- Stage 2:'):]
+        self.assertEqual((SQL_DIR / 'recovery/tradeoff_stage2.sql').read_text(),
+                         normal[normal.index('CREATE TABLE is459_g2t1_aml.bq2_tradeoff\n'):])
+        for label, sql in [('two-stage', normal), ('weekly', weekly + '\n' + stage2)]:
+            with self.subTest(strategy=label):
+                self.db.executescript('DROP TABLE IF EXISTS bq2_tradeoff_flagged;')
+                portable = re.sub(r'WITH\s*\(\s*format\s*=.*?\)\s*AS',
+                                  'AS', sql, flags=re.S)
+                self.db.executescript(portable.replace('is459_g2t1_aml.', ''))
+                actual = [tuple(row) for row in self.db.execute(query)]
+                self.assertEqual(actual, expected)
+                # Weekly output repeats final IDs across windows. Stage 2 must
+                # reduce to one best rank before the original-label join.
+                if label == 'weekly':
+                    duplicates = self.db.execute("""SELECT COUNT(*) FROM (
+                        SELECT dataset, sequence_length, min_support, final_txn_id
+                        FROM bq2_tradeoff_flagged GROUP BY 1,2,3,4 HAVING COUNT(*) > 1)
+                        """).fetchone()[0]
+                    self.assertGreater(duplicates, 0)
+                # A repeated helper row must not inflate any policy totals.
+                self.db.executescript('INSERT INTO bq2_tradeoff_flagged SELECT * FROM bq2_tradeoff_flagged;')
+                portable_stage2 = re.sub(r'WITH\s*\(\s*format\s*=.*?\)\s*AS',
+                                        'AS', stage2, flags=re.S)
+                self.db.executescript(portable_stage2.replace('is459_g2t1_aml.', ''))
+                self.assertEqual([tuple(row) for row in self.db.execute(query)], expected)
+
+
 if __name__ == '__main__':
     unittest.main()

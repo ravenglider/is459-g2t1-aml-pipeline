@@ -91,3 +91,8 @@ Final-run readiness update (9 November 2026): Sonia reports gated publication pa
 Final lift created (9 November 2026): production bq2_lift CTAS succeeded, 6.882 sec and 1.74 GB scanned (screenshot 27), after user-confirmed empty final output destinations. Final lift reconciliation/rankings, trade-off/robustness/Sankey tables and final Tableau updates remain pending.
 
 Final lift totals checked (9 November 2026): all four HI/LI length groups present and baseline arithmetic matches the displayed counts. Counts are recorded in [results](results.md#final-lift-totals--9-november-2026); formal upstream acceptance comparison remains pending receipt availability. Next: production tradeoff.sql; final robustness/Sankey outputs and Tableau updates still pending.
+
+
+## Full-scale trade-off recovery
+
+The single tradeoff.sql CTAS exhausted resources at actual scale. Use the [reviewed two-stage files and runbook](recovery/README.md) for this final run; retain tradeoff.sql as the reference calculation and sample-generator input. Normal Stage 1 completed and helper check passed (screenshot 29). Next: recovery/tradeoff_stage2.sql after final-destination checks. Thirteen local regression tests pass, including normal/weekly equivalence. Actual Stage 2 execution and final reconciliation remain pending. Automation must account for helper lifecycle, failure recovery and source stability rather than invoking the original heavy CTAS.
