@@ -225,3 +225,8 @@ Next: final Sankey creation/reconciliation and lift/Sankey exports, then final T
 ## Final Sankey reconciliation — 9 November 2026
 
 [Grouped reconciliation](screenshots/34-final-sankey-reconciliation.png) matches the previously recorded final lift aggregates exactly: HI pairs 41 patterns / 665,175,780 sequences / 1,274,451 positive sequences; HI triples 224 / 786,431,531 / 2,344,593; LI pairs 39 / 651,111,295 / 1,016,070; LI triples 218 / 769,082,499 / 1,425,484. Thus 522 pattern rows across four scopes. Counts are overlapping sequence occurrences, not distinct transactions or monetary values. This aggregate check does not independently validate every split method field. Runtime 408 ms, queue 90 ms, scanned 3.57 KB; query ID not supplied. Screenshot copied byte-for-byte; Desktop original retained. Next: export final Sankey and lift CSVs for field-level checks and Tableau.
+
+
+## Final Sankey CSV validation — 9 November 2026
+
+Validated bq2_final_sankey.csv, SHA-256 `09566267e3c83bd21d597452bc9edd902ec35f830e75acc3ba42c965471bb9ba`: 522 unique dataset/length/method-sequence rows. All ordered method_1/2/3 fields match the full pattern string, method_3 is blank for pairs, and nonnegative positive plus legitimate sequence counts equal total counts in every row. All four group pattern/total/positive counts match screenshot 34 and the recorded final lift totals. CSV remains local under repository data policy. These are sequence occurrence weights, not distinct transactions or USD. Final lift export/cross-comparison and Tableau updates remain pending.

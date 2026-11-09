@@ -108,3 +108,5 @@ Final robustness export checked at support 100: 20 HI-selected patterns; LI lift
 Final Sankey CTAS completed ([screenshot 33](screenshots/33-final-sankey-created.png)); grouped reconciliation and final CSV export remain pending.
 
 Final Sankey grouped reconciliation passed for all four HI/LI and pair/triple scopes ([screenshot 34](screenshots/34-final-sankey-reconciliation.png)). Final Sankey/lift CSV exports and Tableau updates remain pending.
+
+Final Sankey CSV validated: 522 unique rows, correct ordered method fields and reconciled counts across all four scopes. Final lift CSV and Tableau updates remain pending.
