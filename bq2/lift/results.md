@@ -187,3 +187,8 @@ Xiang Ying reports normal Stage 1 CTAS plus HI-triple, LI-pair and LI-triple INS
 [Own Stage 2 completion evidence](screenshots/30-final-tradeoff-created.png) shows recovery/tradeoff_stage2.sql completed: 14.614 sec runtime, 89 ms queue, 905.07 MB scanned, reuse toggle off. Query ID not supplied; statement attribution from walkthrough. Screenshot copied byte-for-byte from Desktop, original retained. Both normal stages are now reported successful. Weekly fallback was not needed and must not be run against the completed helper. No policy above top-10 was added, so no Stage 1 rank-cap change is needed. No failed-query S3 cleanup was performed by the assistant; it remains separate owner-confirmed maintenance.
 
 Next: expect 48 final policy rows and zero accounting/range/denominator/monotonicity failures, then inspect min_support=100 results. Successful CTAS is not yet a verified final trade-off finding. Robustness/Sankey CTAS and final Tableau updates remain pending.
+
+
+## Final trade-off accounting check — 9 November 2026
+
+[Reconciliation screenshot](screenshots/31-final-tradeoff-reconciliation.png) shows all 12 dataset/sequence-length/minimum-support groups, each with 4 policy rows and 0 accounting_errors (48 rows overall). The executed check verifies reviewed = laundering_flagged + legitimate_reviewed, nonnegative counts and population upper bounds. It does not yet verify rate formulas, policy identities, monotonicity or source denominators. Runtime 538 ms, queue 88 ms, scanned 1.85 KB; query ID not supplied. Screenshot copied byte-for-byte; Desktop original retained. Next: export final min_support=100 trade-off rows for inspection and Tableau.
