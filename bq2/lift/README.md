@@ -102,3 +102,5 @@ Final trade-off Stage 2 succeeded (9 November 2026): 14.614 sec, 905.07 MB scann
 Final trade-off accounting check passed: 12 groups × 4 policy rows, zero accounting errors ([evidence](screenshots/31-final-tradeoff-reconciliation.png)). Final value inspection, robustness and final Tableau updates remain pending.
 
 Final min_support=100 trade-off CSV validated: 16 policy rows, 64 rate formulas, expected populations and monotonic review/flag counts. See [results](results.md). Final pattern-level robustness, Sankey and Tableau updates remain pending.
+
+Final robustness export checked at support 100: 20 HI-selected patterns; LI lift remains above 1 for 10/10 pairs and 8/10 triples. All LI rates/lifts recomputed; see [results](results.md). Final lift cross-comparison, Sankey and Tableau updates remain pending.

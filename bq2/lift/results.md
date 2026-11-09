@@ -206,3 +206,12 @@ Validated user-exported bq2_final_tradeoff.csv (min_support=100), SHA-256: `5aaa
 | LI-Medium | 3 | 9.06% / 2.10% | 9.23% / 2.15% | 9.92% / 7.54% |
 
 Pair top-5 flags no more laundering transactions than top-3 on either dataset while increasing review workload. LI uses frozen HI-ranked selections under the two-stage SQL; independent pattern-level robustness output remains pending. HI results evaluate selection and performance on the same dataset and are descriptive, not held-out validation. Final robustness/Sankey tables, their exports and final Tableau updates remain pending.
+
+
+## Final pattern-level LI robustness — 9 November 2026
+
+[Creation receipt](screenshots/32-final-robustness-created.png): succeeded, 867 ms runtime, 89 ms queue, 54.84 KB scanned; query ID not supplied. User export bq2_final_robustness.csv SHA-256 `3083dc7c71d6a00260bdfe1204305f4054179b49154563f06557429cd9d936f9` contains 20 unique patterns at min_support=100, ten HI-selected pairs and ten HI-selected triples. Checked HI rank coverage 1–10, method counts, support/label bounds and HI lift ordering. Independently recomputed all 20 LI positive-sequence rates and LI lifts using previously recorded sequence baselines. HI support/lift and independent LI ranks have not yet been cross-checked against a final lift CSV. No transaction-level replay or statistical significance test was performed. CSV retained locally under repository data policy.
+
+All ten selected pairs have LI lift >1; nine remain in the independent LI top ten. ACH -> ACH falls from HI lift 8.51 to LI lift 2.23. Eight selected triples have LI lift >1; five remain in the independent LI top ten. ACH -> ACH -> Cheque (0.9882) and ACH -> ACH -> Cash (0.9249) fall below the LI baseline. All twenty meet LI support requirements; Supported on LI denotes support eligibility, not elevated risk or statistical significance. Overlapping sequences are not independent observations. These are descriptive robustness comparisons, not evidence of production detection performance.
+
+Next: final Sankey creation/reconciliation and lift/Sankey exports, then final Tableau updates.
