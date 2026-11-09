@@ -28,3 +28,5 @@ The result crops do not display full SQL, account/region or query execution IDs.
 ## Final-table schema evidence — 9 November 2026
 
 [23-final-sequence-schema.png](23-final-sequence-schema.png): 21 columns in the agreed order, with compatible logical types. Notable inferred widths are rule_version varchar(2) and dataset varchar(9); other expected integer, bigint and array types are present. Runtime 634 ms, queue 99 ms, scanned 1.66 KB. Partition registration is not established by the column list.
+
+[24-final-sequence-partitions.png](24-final-sequence-partitions.png): successful physical-table partition listing for bq2_sequences_a (published bq2_sequences is a view). HI/LI date entries are visible. Runtime 958 ms, queue 174 ms; scanned shown as a dash. Exact coverage summary and row-level acceptance are separate checks.
