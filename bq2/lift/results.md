@@ -180,3 +180,10 @@ All four baseline values independently recompute as positive_sequences / total_s
 User reports original tradeoff.sql exhausted resources. Reviewed teammate-supplied two-stage/weekly alternatives; thirteen local regression tests pass, including equivalence to original calculations and global weekly deduplication. No cloud cleanup was performed here. See [recovery instructions](recovery/README.md).
 
 Xiang Ying reports normal Stage 1 CTAS plus HI-triple, LI-pair and LI-triple INSERTs completed. [Own helper check](screenshots/29-final-tradeoff-helper-check.png) shows distinct finals per cutoff (same counts separately at 50/100/500): HI pairs 6,340,073; HI triples 2,414,516; LI pairs 6,193,755; LI triples 2,357,105. All twelve groups have helper_rows=distinct_final_transactions and rank extrema 1/10. Equal counts across cutoffs alone do not establish identical membership. Do not add across cutoff/length scopes. Runtime 5.026 sec, queue 82 ms, scanned 422.89 MB; query ID not supplied. Screenshot copied byte-for-byte from Desktop, original retained. Next: Stage 2 CTAS and final reconciliation. No weekly fallback or successful final trade-off CTAS is claimed yet.
+
+
+## Final two-stage trade-off creation succeeded — 9 November 2026
+
+[Own Stage 2 completion evidence](screenshots/30-final-tradeoff-created.png) shows recovery/tradeoff_stage2.sql completed: 14.614 sec runtime, 89 ms queue, 905.07 MB scanned, reuse toggle off. Query ID not supplied; statement attribution from walkthrough. Screenshot copied byte-for-byte from Desktop, original retained. Both normal stages are now reported successful. Weekly fallback was not needed and must not be run against the completed helper. No policy above top-10 was added, so no Stage 1 rank-cap change is needed. No failed-query S3 cleanup was performed by the assistant; it remains separate owner-confirmed maintenance.
+
+Next: expect 48 final policy rows and zero accounting/range/denominator/monotonicity failures, then inspect min_support=100 results. Successful CTAS is not yet a verified final trade-off finding. Robustness/Sankey CTAS and final Tableau updates remain pending.

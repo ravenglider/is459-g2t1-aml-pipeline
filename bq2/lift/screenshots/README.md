@@ -40,3 +40,5 @@ The result crops do not display full SQL, account/region or query execution IDs.
 [28-final-lift-totals.png](28-final-lift-totals.png): four dataset/length groups from final bq2_lift, selecting min_support 100 only. Runtime 548 ms, queue 95 ms, scanned 8.93 KB. Baselines independently recomputed from the displayed positive/total counts; upstream acceptance comparison remains pending receipt availability.
 
 [29-final-tradeoff-helper-check.png](29-final-tradeoff-helper-check.png): twelve dataset/length/cutoff groups; helper rows equal distinct final IDs in each group, rank extrema 1/10. Runtime 5.026 sec, queue 82 ms, scanned 422.89 MB; query ID not supplied.
+
+[30-final-tradeoff-created.png](30-final-tradeoff-created.png): final Stage 2 CTAS completed successfully; runtime 14.614 sec, queue 89 ms, scanned 905.07 MB. Query ID not supplied; statement attribution from walkthrough. Output reconciliation remains pending; weekly fallback not needed.
