@@ -230,3 +230,10 @@ Next: final Sankey creation/reconciliation and lift/Sankey exports, then final T
 ## Final Sankey CSV validation — 9 November 2026
 
 Validated bq2_final_sankey.csv, SHA-256 `09566267e3c83bd21d597452bc9edd902ec35f830e75acc3ba42c965471bb9ba`: 522 unique dataset/length/method-sequence rows. All ordered method_1/2/3 fields match the full pattern string, method_3 is blank for pairs, and nonnegative positive plus legitimate sequence counts equal total counts in every row. All four group pattern/total/positive counts match screenshot 34 and the recorded final lift totals. CSV remains local under repository data policy. These are sequence occurrence weights, not distinct transactions or USD. Final lift export/cross-comparison and Tableau updates remain pending.
+
+
+## Final lift CSV and cross-export validation — 9 November 2026
+
+Validated bq2_final_lift.csv, SHA-256 `e7b37b1f698ead979bcdd8594fb8e2608ec0422f8b374ab316553559fb439c02`: 522 unique dataset/length/pattern rows at min_support=100. All laundering rates, baselines, support shares and lifts independently recompute; all support eligibility flags and eligible rank sequences match the SQL tie-break order (lift descending, positive count descending, support descending, pattern ascending). Aggregate totals match screenshot 28/34. Eligible patterns: HI pairs 38/41, HI triples 217/224, LI pairs 38/39, LI triples 217/218. All 522 Sankey pattern support/positive counts match this export. All 20 robustness rows match the HI/LI lift export for ranks, support and lift, plus LI positive counts and rates. This completes the previously pending cross-export comparison, not an independent transaction-level rebuild. CSVs remain local under repository data policy.
+
+HI pair leader is ACH -> ACH (lift 8.5131); HI triple leader is ACH -> Cash -> ACH (5.5767). LI independent leaders are ACH -> ACH (2.2319) and Cash -> Credit Card -> ACH (2.3850). LI independent ranking is descriptive; targeted policies retain HI selections. Final Tableau replacement/filter verification, workbook packaging and automation handoff remain pending.

@@ -110,3 +110,5 @@ Final Sankey CTAS completed ([screenshot 33](screenshots/33-final-sankey-created
 Final Sankey grouped reconciliation passed for all four HI/LI and pair/triple scopes ([screenshot 34](screenshots/34-final-sankey-reconciliation.png)). Final Sankey/lift CSV exports and Tableau updates remain pending.
 
 Final Sankey CSV validated: 522 unique rows, correct ordered method fields and reconciled counts across all four scopes. Final lift CSV and Tableau updates remain pending.
+
+All four final support-100 CSV exports have now been checked: lift, trade-off, robustness and Sankey. Lift rankings/formulas and the cross-export comparisons passed. Final Tableau updates, packaging and automation handoff remain pending.
