@@ -1,6 +1,6 @@
 # BQ2 analytics and targeting (Role 6)
 
-Owner: Xiang Ying. Status (9 November 2026): final Athena analytics and three Tableau dashboards completed and checked. Xiang Ying confirms all three dashboards load correctly after saving, closing and reopening. Credential-free native workbook delivery and automation handoff remain pending.
+Owner: Xiang Ying. Status (9 November 2026): final Athena analytics and three Tableau dashboards completed and checked. Xiang Ying confirms all three dashboards load correctly after saving, closing and reopening. A credential-free [native workbook](../../viz/BQ2_Final_HI_LI_Analysis.twb) is included; reopening this sanitized copy and automation handoff remain pending.
 
 ## What it does
 
@@ -130,3 +130,7 @@ All four final support-100 CSV exports have now been checked: lift, trade-off, r
 Final Tableau HI–LI robustness dashboard captured for [pairs](../../viz/screenshots/35-final-robustness-pairs.png) and [triples](../../viz/screenshots/36-final-robustness-triples.png). Visible values match the checked export. Final HI dashboard screenshots, native workbook save/reopen verification and automation handoff remain pending.
 
 Final HI [pairs](../../viz/screenshots/37-final-hi-dashboard-pairs.png) and [triples](../../viz/screenshots/38-final-hi-dashboard-triples.png) dashboards captured. The corrected triples capture resolves Support Count widths and checklist visibility. Xiang Ying confirms save/reopen passed; native-workbook inspection/delivery and automation handoff remain pending.
+
+## Native Tableau workbook
+
+[Open BQ2_Final_HI_LI_Analysis.twb](../../viz/BQ2_Final_HI_LI_Analysis.twb). It contains nine worksheets and three dashboards, connected to four final Athena aggregate sources. The GitHub copy clears saved AWS access-key IDs and removes three unused sample CSV sources with personal Downloads paths. XML checks confirm all worksheet/dashboard definitions and retained final-source metadata are unchanged except cleared connection usernames; no nonempty password/secret/session-token attributes or AWS access IDs remain. The Downloads original is unchanged. Recipients must enter their own authorised AWS credentials. Xiang Ying verified the original workbook reopens; this sanitized copy still needs a Tableau reopen check. Keep the packaged .twbx separately for submission.
