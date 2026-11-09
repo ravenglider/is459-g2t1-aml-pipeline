@@ -23,3 +23,8 @@ The corrected schema screenshot is saved as `01-cleaned-schema.png` and agrees w
 The Desktop files for 06/07 used colon-separated filenames; repository copies use normal filenames inside this folder. Originals were retained.
 
 The result crops do not display full SQL, account/region or query execution IDs. Query/dataset/date attribution comes from the accompanying conversation. Runtime and scan figures are transcribed as displayed, not independent benchmark reruns. The one-day query checks missing USD only; it does not establish full-dataset USD quality or transaction-ID uniqueness. Missing sequence names do not rule out a different Role 5 schema or permission-dependent visibility.
+
+
+## Final-table schema evidence — 9 November 2026
+
+[23-final-sequence-schema.png](23-final-sequence-schema.png): 21 columns in the agreed order, with compatible logical types. Notable inferred widths are rule_version varchar(2) and dataset varchar(9); other expected integer, bigint and array types are present. Runtime 634 ms, queue 99 ms, scanned 1.66 KB. Partition registration is not established by the column list.

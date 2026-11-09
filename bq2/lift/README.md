@@ -80,3 +80,6 @@ Array validation references: [AWS UNNEST](https://docs.aws.amazon.com/athena/lat
 
 
 Sample Tableau progress (8 November 2026): base worksheets and combined pairs/triples dashboards rendered, with nine screenshots and business descriptions in [viz/screenshots](../../viz/screenshots/README.md). The checklist top-3 pairs match the lift export. Xiang Ying reports checklist control tests passed; the dashboard shows the expected top-5 pairs. Current native workbook save/inspection/delivery and final HI/LI analysis remain pending.
+
+
+Final input check (9 November 2026): 21-column schema is compatible, but SHOW PARTITIONS reports the current bq2_sequences table is unpartitioned. Inspect its actual DDL before assuming partition pruning or launching large final queries; see [results](results.md#final-input-metadata-checks--9-november-2026). Final publication completeness and acceptance remain unverified in this session.

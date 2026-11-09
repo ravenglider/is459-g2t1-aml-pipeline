@@ -124,3 +124,10 @@ Screenshot copied byte-for-byte from Desktop, original retained. Some headings/l
 [Revised Desktop screenshot](../../viz/screenshots/22-sample-dashboard-triples.png) copied byte-for-byte after Xiang Ying selected this replacement. Original retained. Visible triple results match checked exports: all targeted catch rates 5.71%, legitimate review rates 0.11%/0.36%/1.00%, top-ranked Cash -> Cheque -> Wire lift 75.81, and expected top-3 checklist. Three Sankey stages are present without a Null node. The dashboard states development-only status and distinct counting units. Some headings and long paths remain truncated. The image does not independently establish saved filter independence or all interactive behaviour.
 
 At the preceding file check, Downloads/Big Data bq2 analysis.twbx contained only BQ2 Sample - Pairs. The active workbook may be saved elsewhere or contain unsaved changes: save and confirm its location before native-workbook delivery. Final HI/LI findings and LI robustness remain pending.
+
+
+## Final input metadata checks — 9 November 2026
+
+[Final schema screenshot](screenshots/23-final-sequence-schema.png) shows 21 expected names in the agreed order, with compatible types including varchar(2) for rule_version and varchar(9) for dataset. Runtime 634 ms, queue 99 ms, scanned 1.66 KB; schema-query ID not supplied. Screenshot copied byte-for-byte from Desktop.
+
+User-reported SHOW PARTITIONS is459_g2t1_aml.bq2_sequences failed with “not a partitioned table”, query ff58d7e3-29b8-4504-9d00-ed0a3cdffaa2. This indicates the queried Catalog table is registered as unpartitioned, contrasting with the checked-in Athena generator's partitioned_by configuration; it does not establish a Step Functions failure or data loss. dataset/start_date column presence alone is not partition metadata. Next: SHOW CREATE TABLE to inspect actual LOCATION, partition declaration and properties; obtain Sonia's current table definition and completed-run acceptance evidence. No repair/rebuild, final CTAS or broad data scan was executed here. Do not assume date filters provide partition pruning until this discrepancy is resolved.
