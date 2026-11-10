@@ -1,5 +1,7 @@
 # Role 6 execution guide — Role 5 v1 interface
 
+> **Historical (10 November 2026):** written before the final data existed. The final results are in [results.md](results.md) and the steps are now automated; see the [Role 6 README](README.md).
+
 ## What is complete
 
 Cleaned schema, one-day HI missing-USD check and full HI/LI baseline reconciliation are evidenced in [results.md](results.md) and [screenshots](screenshots/README.md). Do not rerun them merely because the sequence schema changed. The role implements proposal pages 8–9: ranking, top-3/5/10 checks, LI robustness, Sankey and targeted checklist.

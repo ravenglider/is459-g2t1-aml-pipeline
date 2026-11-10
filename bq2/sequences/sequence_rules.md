@@ -1,5 +1,7 @@
 # BQ2 sequence-building rules
 
+> **Implemented (10 November 2026):** the production Athena build in [`athena/`](athena/README.md) follows these v1 rules, and the pipeline's per-day count, lineage and structure gates check them on every run. Wording below that says "proposed" dates from the design stage.
+
 ## Status and ownership
 
 Contract version: `v1`.

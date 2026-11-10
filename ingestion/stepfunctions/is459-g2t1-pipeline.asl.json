@@ -1,5 +1,5 @@
 {
-  "Comment": "IS459 G2T1 AML pipeline: ingest external rates, crawl, ETL, BQ1 and BQ2 in parallel. Pass states are placeholders until teammates' jobs exist.",
+  "Comment": "IS459 G2T1 AML pipeline: lock, ingest external rates, crawl, ETL, then BQ1 corridors, BQ1 graph and BQ2 (gated sequences, then lift) in parallel, then the BQ1 priority list.",
   "StartAt": "PipelineLock",
   "States": {
     "PipelineLock": {

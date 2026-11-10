@@ -47,6 +47,6 @@ The result crops do not display full SQL, account/region or query execution IDs.
 
 - `32-final-robustness-created.png`: successful final robustness CTAS, 867 ms runtime, 54.84 KB scanned; query ID not supplied.
 
-- `33-final-sankey-created.png`: final Sankey CTAS succeeded; runtime 868 ms, queue 83 ms, scanned 6.88 KB. Grouped reconciliation remains pending.
+- `33-final-sankey-created.png`: final Sankey CTAS succeeded; runtime 868 ms, queue 83 ms, scanned 6.88 KB. Grouped reconciliation: see screenshot 34.
 
 - `34-final-sankey-reconciliation.png`: all four Sankey pattern/sequence/positive totals match final lift totals; 408 ms runtime, 3.57 KB scanned.

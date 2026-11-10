@@ -209,6 +209,8 @@ def lock_state(nxt):
 
 def main():
     d = json.loads(ASL.read_text())
+    d["Comment"] = ("IS459 G2T1 AML pipeline: lock, ingest external rates, crawl, ETL, then BQ1 corridors, "
+                    "BQ1 graph and BQ2 (gated sequences, then lift) in parallel, then the BQ1 priority list.")
     if d["StartAt"] != "PipelineLock":
         d["States"] = {"PipelineLock": lock_state(d["StartAt"]), **d["States"]}
         d["StartAt"] = "PipelineLock"

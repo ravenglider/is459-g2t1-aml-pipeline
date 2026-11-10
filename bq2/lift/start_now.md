@@ -1,5 +1,7 @@
 # Start Role 6 now: numbered walkthrough
 
+> **Historical (10 November 2026):** completed on 2 November 2026. Kept as a record of the pre-Role-5 checks.
+
 This walkthrough needs only Role 2's cleaned data. Do these steps in order. The SQL is in [start_now.sql](start_now.sql). It does not create tables, run Glue, reset S3 folders or depend on Role 5. Xiang Ying subsequently completed the console checks on 2 Nov 2026. See [verified results](results.md#console-verification--2-nov-2026) and [saved screenshots](screenshots/README.md). The earlier CLI error used a different personal account.
 
 ## 1. Open the right GitHub branch

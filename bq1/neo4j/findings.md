@@ -1,5 +1,7 @@
 # Role 4 graph findings
 
+> **Pipeline integration (10 November 2026):** the graph branch runs inside `is459-g2t1-pipeline` through SSM document `is459-g2t1-role4-graph`. Full pipeline executions `9thrun_fixedbq2sequences` and `demo_run` (both 9 November 2026) succeeded end to end, which includes this branch validating the run's `success.json` and updating `bq1_graph_bank_features_latest` before the priority list was rebuilt.
+
 Owner: Role 4. Manual run validated on 3 November 2026. BQ1: Which bank pairs are most involved in laundering, and which should prioritise information sharing?
 
 HI graph/import/GDS and the Athena join preview are validated. Final Browser scenes, HI USD-weight sensitivity and primary LI analysis are recorded below. The planned HI cutoff comparison is complete. Task 11 direct sample/HI/repeat trials passed. Task 12 SSM sample success/output acceptance,duplicate-run rejection,isolated shell-timeout and read-only feature-validator probes passed. Ryan now reports live priority-list adoption; Sonia reports a completed whole-pipeline run and automatic rebuild with the updated SQL. Independent execution references and rebuilt-output acceptance remain to be recorded. Live full-run publication suppression under injected faults was not established by the read-only probe. Optional investigation upgrades prepared on8 November remain locally checked,not live-executed. This is a findings record, not a claim that all Role 4 deliverables are complete.

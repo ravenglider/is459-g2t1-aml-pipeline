@@ -4,7 +4,7 @@ The original tradeoff.sql exhausted resources at full scale (user report). The t
 
 ## Current run
 
-Xiang Ying reports normal Stage 1 CTAS and all three INSERTs completed. Screenshot 29 verifies twelve helper groups, unique final IDs within each group and ranks 1–10. Do not repeat successful INSERTs or drop this completed helper. Weekly fallback was not needed. Stage 2 subsequently completed successfully (screenshot 30: 14.614 sec, 905.07 MB scanned). Final reconciliation remains pending.
+Xiang Ying reports normal Stage 1 CTAS and all three INSERTs completed. Screenshot 29 verifies twelve helper groups, unique final IDs within each group and ranks 1–10. Do not repeat successful INSERTs or drop this completed helper. Weekly fallback was not needed. Stage 2 subsequently completed successfully (screenshot 30: 14.614 sec, 905.07 MB scanned). Final reconciliation then passed (48 rows, zero accounting errors; see [results](../results.md)). The pipeline now runs this two-stage trade-off automatically.
 
 ## Run and recovery rules
 

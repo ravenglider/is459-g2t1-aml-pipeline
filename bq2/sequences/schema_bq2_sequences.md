@@ -1,4 +1,6 @@
-# Proposed bq2_sequences output schema
+# bq2_sequences output schema (v1)
+
+> **Implemented (10 November 2026):** the production `bq2_sequences` view (Athena build in [`athena/`](athena/README.md)) uses exactly this 21-column v1 schema. Wording below that says "proposed" dates from the design stage.
 
 ## Status
 

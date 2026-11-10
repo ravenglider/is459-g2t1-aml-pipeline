@@ -1,8 +1,8 @@
 # BQ2 execution record
 
-Status: pre-Role-5 checks completed by Xiang Ying in the AWS console and reviewed from supplied results/screenshots. The earlier CLI attempt used a different personal account and failed before execution; it does not describe the successful team-console session. No real-data BQ2 ranking, percentages or recommendation is claimed. Proposal pages 8–9 contain illustrations, not results.
+Status (10 November 2026): complete. Final HI/LI results are in the dated 9 November sections below, from [Final input metadata checks](#final-input-metadata-checks--9-november-2026) onward. The earlier sections are the development log. Since then the pipeline rebuilds these tables automatically and checks them with the lift gate ([`demo_run` evidence](../sequences/athena/evidence/pipeline_demo_run.md)). Proposal pages 8–9 contain illustrations, not results.
 
-Before marking Role 6 complete, record:
+Checklist used to track Role 6 completion:
 - Confirmed Role 5 contract, construction version, chain label, window/overlap rules and dataset/date coverage.
 - Validation results, HI/LI chain counts, transaction reconciliation and support threshold/sensitivity.
 - AWS query IDs, actual table S3 locations, execution time and bytes scanned.
