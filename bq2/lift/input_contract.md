@@ -1,5 +1,7 @@
 # Role 6 input contract — aligned to Role 5 v1
 
+> **Historical (10 November 2026):** this was the sample-stage interface check. The final run read the production `bq2_sequences` view; see the [Role 6 README](README.md).
+
 Status: Role 6 implementation is aligned to Ji Ning's documented 21-column interface. Ji Ning reports successful sample publication and schema/value/lineage acceptance; those AWS results have not been independently retrieved in this session. Start with the [development runbook](development/README.md). This is an interface-readiness statement, not a claim that Role 5 has deployed a builder or that a direct message has been sent.
 
 ## Canonical interface

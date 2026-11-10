@@ -1,5 +1,7 @@
 # Full HI/LI generation: local implementation and publication boundary
 
+> **Not used in production (10 November 2026):** this Glue design was replaced by the Athena build in [`athena/`](athena/README.md), which builds `bq2_sequences` inside the Step Functions pipeline. Kept for reference.
+
 The integrated entrypoint now generates, validates, copies an immutable production
 version, updates the selected dataset's Catalog partitions and verifies publication.
 All implementation testing is local: no production deployment, effective cloud

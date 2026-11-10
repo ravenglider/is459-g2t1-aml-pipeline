@@ -113,6 +113,8 @@ again after rerunning the query.
 
 ## Step Functions info for Sonia
 
+**Pipeline integration (10 November 2026):** the graph branch runs inside `is459-g2t1-pipeline` through SSM document `is459-g2t1-role4-graph`. Full pipeline executions `9thrun_fixedbq2sequences` and `demo_run` (both 9 November 2026) succeeded end to end, which includes this branch validating the run's `success.json` and updating `bq1_graph_bank_features_latest` before the priority list was rebuilt.
+
 | Field | Value / status |
 |---|---|
 | Job type | Neo4j export/import/analysis on existing EC2; sample SSM invocation validated |
@@ -130,7 +132,7 @@ again after rerunning the query.
 | Observed direct runtime | HI run01:63.522618s; fresh HI run02:52.480852s; sample:37.155682s. Not an SSM/end-to-end SLA or billed EC2 uptime |
 | Completion/failure handling | Poll terminal SSM outcome with bounded timeout; require zero response code and validated outputs; coordinate EC2 lifecycle and exclusive graph use |
 
-Sonia owns changes to the shared `BQ1_Neo4jLoad` placeholder, state machine and
+Sonia owns changes to the shared graph branch (formerly the `BQ1_Neo4jLoad` placeholder), state machine and
 orchestration permissions. Role 4 sent her the tested command/interface, output
 table/S3 path, dependencies, runtime and evidence, following
 [the ingestion handoff](../../docs/ingestion-handoff.md#how-your-job-gets-added).

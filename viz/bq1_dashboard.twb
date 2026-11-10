@@ -23,7 +23,7 @@
       <connection class='federated'>
         <named-connections>
           <named-connection caption='athena.us-east-1.amazonaws.com' name='athena.0qj4c690bq6u6a15xz22g0vwl4cg'>
-            <connection authentication='auth-user-pass' class='athena' dbname='AwsDataCatalog' one-time-sql='' port='443' schema='is459_g2t1_aml' server='athena.us-east-1.amazonaws.com' username='AKIAXZ5NGFWBX2MRTM6S' warehouse='s3://is459-g2t1-aml-athena-bucket/results/'>
+            <connection authentication='auth-user-pass' class='athena' dbname='AwsDataCatalog' one-time-sql='' port='443' schema='is459_g2t1_aml' server='athena.us-east-1.amazonaws.com' username='' warehouse='s3://is459-g2t1-aml-athena-bucket/results/'>
               <connection-customization class='athena' enabled='false' version='18.1'>
                 <vendor name='athena' />
                 <driver name='athena' />

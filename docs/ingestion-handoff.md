@@ -1,6 +1,6 @@
 # IS459 G2T1 AML Project: Ingestion & Orchestration Handoff
 
-**Status:** Ingestion complete. Step Functions skeleton running end to end. Waiting on Roles 2 to 6 for job names.
+**Status (10 November 2026):** Complete. Every role's step is live in the Step Functions pipeline, and the latest full run (`demo_run`, 9 November 2026) succeeded in 92 minutes with all 114 data checks passing ([evidence](../bq2/sequences/athena/evidence/pipeline_demo_run.md)). Tableau dashboards read the final tables live from Athena.
 
 ---
 
@@ -51,16 +51,24 @@ is459-g2t1-aml-athena-bucket/
   scripts/     Glue job scripts
 ```
 
-**Processed bucket:** each role creates its own folder (CREATE YOUR OWN I DID NOT CREATE IT YET). Proposed names:
+**Processed bucket layout** (one folder per table; the pipeline writes all of these)
 
 ```
 is459-g2t1-aml-processed-bucket/
-  transactions_clean/   (Role 2)
-  bq1_corridors/        (Role 3)
-  bq1_graph_edges/      (Role 4)
-  bq2_sequences/        (Role 5)
-  bq2_lift/             (Role 6)
+  transactions_clean/                     Role 2   cleaned Parquet, partitioned by dataset
+  bq1_direct_corridors/                   Role 3   BQ1 step 1
+  bq1_attempt_banks/                      Role 3   BQ1 step 2a
+  bq1_shared_attempt_value/               Role 3   BQ1 step 2b
+  bq1_corridors_ranked/                   Role 3   ranked corridors (Tableau)
+  bq1_graph_edges/, bq1_graph_results/    Role 4   Neo4j input edges and graph features
+  bq1_priority_sharing_list/              Role 3   corridors + graph features
+  bq2_sequences/, bq2_sequences_b/        Role 5   the two sequence copies (A and B)
+  bq2_lift/                               Role 6   lift by pattern (Tableau)
+  bq2_tradeoff_flagged/                   Role 6   trade-off helper
+  bq2_tradeoff/, bq2_robustness/, bq2_sankey/   Role 6   (Tableau)
 ```
+
+Folders ending in `_dev` and other `bq2_sequences_*` folders hold the sample and development builds from earlier testing. The pipeline does not use them.
 
 ### 2.2 Glue Data Catalog
 
@@ -112,7 +120,7 @@ is459-g2t1-aml-processed-bucket/
 | Execution role | `is459-g2t1-reset-outputs-role-*`, with `AmazonS3FullAccess` and `AWSGlueConsoleFullAccess` attached |
 | Purpose        | Before Athena CTAS steps rerun: deletes the Glue tables and empties their S3 folders                 |
 | Safety         | Only works on `is459-g2t1-aml-processed-bucket`, and only on folder prefixes ending in `/`           |
-| Used by        | `BQ1_ResetOutputs` step (Role 3 tables). Reusable for Role 6                                         |
+| Used by        | `BQ1_ResetOutputs` and `BQ1_PriorityReset` (Role 3 tables), `BQ2_Lift_Reset` (Role 6 tables)         |
 
 BQ2 never drops live data: it builds the copy that `bq2_sequences` does not point to, and switches the view only after every gate passes. A failed run leaves the live copy untouched. See `bq2/sequences/athena/README.md`.
 
@@ -135,7 +143,7 @@ BQ2 never drops live data: it builds the copy that `bq2_sequences` does not poin
 | State machine  | `is459-g2t1-pipeline` (Standard)                                                                                          |
 | Execution role | Auto-created, with `AWSGlueConsoleFullAccess`, `AWSLambdaRole`, `AmazonAthenaFullAccess`, `AmazonS3FullAccess` attached   |
 | Input          | `{}`                                                                                                                      |
-| Last run       | 9 Nov 2026, `9thrun_fixedbq2sequences` (ETL, BQ1, Role 4 graph, gated BQ2 build: 113/113 gates passed)                    |
+| Last run       | 9 Nov 2026, `demo_run`: Succeeded in 92 min, all steps of every role, 114/114 data checks passed                          |
 | Concurrency    | `PipelineLock` (first state) stops a run while an earlier execution is still running                                      |
 | BQ2 output     | `bq2_sequences` is a **view** on `bq2_sequences_a` or `bq2_sequences_b`. Query the view, never write to `_a`/`_b` by hand |
 
@@ -187,7 +195,8 @@ BQ2 never drops live data: it builds the copy that `bq2_sequences` does not poin
 | `is_laundering`      | bigint | 1 = laundering, 0 = legitimate                                   |
 
 - **HI-Medium date range:** 2022-09-01 00:00 to 2022-09-28 15:58
-- **HI-Medium rows:** 31,898,238
+- **HI-Medium rows:** 31,898,238 raw, 31,898,218 in `transactions_clean`
+- **LI-Medium:** 31,251,469 rows in `transactions_clean`, 2022-09-01 to 2022-09-27; used for the BQ2 robustness check
 - **Sample:** first 500,000 rows of HI-Medium, a contiguous slice in time so 24h chains and multi-hop paths stay intact
 - `transactions_clean` is partitioned by `dataset`; an ETL run replaces only its own dataset's partition (verified 7 Nov: HI rewrite left LI from 1 Nov intact).
 
@@ -233,7 +242,7 @@ PipelineLock (Lambda: stop if an earlier execution is running)
        Graph: start EC2 if needed → SSM run_graph (Neo4j) → check receipt → update _latest view → stop EC2   [LIVE: Role 4]
        BQ2: Plan → source gate → reset build copy → create → Map 55 dataset-days (pairs, triples, day gate)
             → structure gate → source gate (unchanged) → publish view   [LIVE: Role 5 Athena]
-            → BQ2_LiftAnalysis   [Role 6 placeholder]
+            → reset → lift → trade-off stage 1 and 2 → robustness → Sankey → lift gate   [LIVE: Role 6 Athena]
   → BQ1_PriorityReset → BQ1_PriorityList   [LIVE: Role 3 + Role 4 features]
   → PipelineComplete
 ```
@@ -243,6 +252,8 @@ Step Functions has no `.sync` integration for crawlers, so the crawler is polled
 Athena CTAS steps run as the state machine role, so that role needs S3 access to read `transactions_clean` and write outputs. Before each CTAS rerun, `is459-g2t1-reset-outputs` drops the tables and empties their folders.
 
 ### How your job gets added
+
+All placeholders have been replaced (9 November 2026). This section is kept as the guide for adding a new step.
 
 Send Sonia:
 

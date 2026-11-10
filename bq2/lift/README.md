@@ -14,7 +14,7 @@ Existing resources: region `us-east-1`, database `is459_g2t1_aml`, Athena workgr
 
 ## Inputs and outputs
 
-| File             | Reads                                                  | Proposed output table / processed-bucket prefix |
+| File             | Reads                                                  | Output table / processed-bucket prefix |
 | ---------------- | ------------------------------------------------------ | ----------------------------------------------- |
 | `bq2_lift.sql`   | `bq2_sequences`                                        | `bq2_lift` / `bq2_lift/`                        |
 | `tradeoff.sql`   | lift, sequences (`final_txn_id`), `transactions_clean` | `bq2_tradeoff` / `bq2_tradeoff/`                |
@@ -33,7 +33,7 @@ All tables use database `is459_g2t1_aml`. Output prefixes are under `s3://is459-
 - Count/rate formatting, final-data labels and tooltip population notes reviewed. Some dashboard headings are abbreviated and small Sankey nodes have no visible labels.
 - Xiang Ying confirms save/close/reopen succeeded for all three dashboards. This is user-reported native-app acceptance; the final workbook file has not yet been inspected by the assistant.
 
-Remaining: credential-free native workbook packaging/delivery and the validated two-stage SQL handoff for Sonia's automation. No deployment is claimed.
+Automation: the Role 6 SQL is wired into the pipeline and ran successfully in `demo_run` on 9 November 2026, with the lift gate passing (see Pipeline automation below).
 
 ## Earlier progress log
 
@@ -79,7 +79,7 @@ Local verification: `python3 -m unittest discover -s bq2/lift/tests -v`. Tests e
 | Depends on | Validated v1 HI/LI sequence occurrences and both cleaned partitions (no membership table) |
 | Runtime    | Not measured; capture time and bytes scanned on real runs                                 |
 
-After fetching current main, the checked-in state machine has live ETL/BQ1 tasks; BQ2 remains Pass placeholders. These files do not update the deployed state machine. Gate the branch on quality-check success; do not blindly retry CTAS against fixed prefixes. The existing `is459-g2t1-reset-outputs` Lambda is reusable for a coordinated refresh; ask Sonia to register only the four Role 6 destinations, preserving existing outputs. She must prevent concurrent writers and ensure both HI/LI inputs are ready. Alternatively use consistent per-run names/locations. Claim automation only after a real successful execution.
+Historical note: this table was the handoff before automation. The steps are now live in the pipeline; see Pipeline automation below.
 
 ## Pipeline automation (Role 1)
 
@@ -95,6 +95,8 @@ The Role 6 SQL now runs inside `is459-g2t1-pipeline`, in the BQ2 branch straight
 | `BQ2_Lift_Check`               | `pipeline_gate.sql`: lift and Sankey totals equal `bq2_sequences` per dataset and length, 12 lift groups, no duplicate ranks, every expected Stage 1 group present with no duplicate final IDs and ranks 1 to 10, 48 trade-off rows with zero accounting errors, one robustness row per HI top-10 pattern. Any failure stops the run with the check row as the cause |
 
 Reruns are safe because the reset runs first, so the INSERTs never append to an earlier run's rows. Athena steps are retried only when Athena refuses to start the query. `lift_only.asl.json` is the same chain as a small state machine for a quick test. `tests/pipeline_chain_check.py` runs the exact embedded statements on synthetic data in DuckDB, checks the gate passes, and checks that nine corruptions (duplicate INSERT, missing Stage 1 group, lost rows, accounting error, changed sequences, bad rank) are all blocked.
+
+First automated run: `demo_run`, 9 November 2026, lift gate `ok = true` ([evidence](../sequences/athena/evidence/pipeline_demo_run.md)).
 
 Trade-off: during the few minutes the chain runs, the four Tableau sources are being rebuilt, so refresh the dashboards after the run succeeds.
 

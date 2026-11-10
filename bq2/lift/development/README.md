@@ -1,5 +1,7 @@
 # Role 6: run the accepted sample development batch
 
+> **Historical (10 November 2026):** sample-stage runbook, completed 7 to 8 November 2026. Final results are in [results.md](../results.md).
+
 Status: Ji Ning reports completed publication and Athena acceptance. Role 6 has not rerun these queries in this session. This runbook tests the Role 6 integration using the published sample partition; outputs are not final HI/LI findings.
 
 ## Confirmed handoff supplied by Ji Ning

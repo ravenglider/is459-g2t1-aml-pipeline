@@ -1,6 +1,6 @@
 # BQ2 Tableau build guide — Xiang Ying
 
-Status: four-sheet dashboard layout and aggregate SQL prepared; real findings and a native Tableau workbook remain pending. Native Tableau UI access was unavailable in this session; a workbook has not been created.
+Status: superseded by the final workbook [`BQ2_Final_HI_LI_Analysis.twb`](BQ2_Final_HI_LI_Analysis.twb) (9 November 2026). This guide records the planned layout.
 
 ## Connection
 

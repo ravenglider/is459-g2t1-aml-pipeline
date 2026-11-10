@@ -1,5 +1,7 @@
 # Full HI/LI production publication and recovery
 
+> **Not used in production (10 November 2026):** this Glue design was replaced by the Athena build in [`athena/`](athena/README.md), which builds `bq2_sequences` inside the Step Functions pipeline. Kept for reference.
+
 Local implementation only. No cloud deployment, permissions or full-data
 performance certification is implied. Sample `bq2_sequences_dev`, sample staging
 and existing publication-planning modules are not changed.

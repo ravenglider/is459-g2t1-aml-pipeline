@@ -274,6 +274,8 @@ A real successful validation must include a `VALIDATED_READ_ONLY` report with ma
 | Full HI-Medium/LI-Medium generation through Glue                         | **NOT COMPLETED**; HI probes/benchmarks only, no full LI Glue completion                                                                                   |
 | Sample development table publication                                     | **COMPLETED**; accepted publication evidence is recorded above                                                                                   |
 | Production publication through Glue                                     | **NOT PERFORMED**; sample development publication was a separate manual handoff                                          |
+| Full HI-Medium/LI-Medium generation (Athena build in `athena/`)        | **COMPLETED**: 2.87 billion chains, every dataset-day gated; rebuilt by every pipeline run |
+| Production publication (`bq2_sequences` view)                          | **COMPLETED** through the Step Functions pipeline; latest run `demo_run`, 9 November 2026 ([evidence](athena/evidence/pipeline_demo_run.md)) |
 
 Historical preflight safety notes (5–7 November 2026, retained for context): any further paid execution requires separate approval and coordination with Sonia, a renewed no-refresh agreement and review of saved job settings. Do not run the shared Step Functions pipeline for the first sample test: its current ETL argument selects HI-Medium. No full-data runtime or final growth thresholds are known.
 
@@ -281,7 +283,7 @@ Historical preflight safety notes (5–7 November 2026, retained for context): a
 
 The following is the historical Glue integration proposal from 5–7 November 2026, not a current deployment-status statement.
 
-The repository's [state-machine definition](../../ingestion/stepfunctions/is459-g2t1-pipeline.asl.json) still has a Role 5 placeholder. This handoff describes future integration, not a deployed state.
+The repository's [state-machine definition](../../ingestion/stepfunctions/is459-g2t1-pipeline.asl.json) had a Role 5 placeholder at the time. It has since been replaced by the Athena build in `athena/` (see the top of this README).
 
 | Field               | Dedicated preflight                                                                                                           | Future BQ2 sequence workflow                                                                                         |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |

@@ -9,7 +9,7 @@ Tableau dashboards for BQ1 (heatmap, ranked corridors) and BQ2 (Sankey, trade-of
 | File | Contents |
 |---|---|
 | `bq1_dashboard.twb` | BQ1 workbook (`.twb`, not `.twbx`) |
-| `bq2_dashboard.twb` | BQ2 workbook |
+| `BQ2_Final_HI_LI_Analysis.twb` | BQ2 workbook (final HI and LI data) |
 | `screenshots/` | PNG of each dashboard for the slides |
 | `connection.md` | How to connect Tableau to Athena (driver, region, S3 staging directory, workgroup) |
 
@@ -21,7 +21,7 @@ Tableau dashboards for BQ1 (heatmap, ranked corridors) and BQ2 (Sankey, trade-of
 
 ---
 
-## README template (fill in as you build)
+## Details
 
 ### What it does
 
@@ -41,30 +41,32 @@ Tableau dashboards visualizing BQ1 (bank-pair corridor heatmap and a ranked top-
 | | Table | S3 path |
 |---|---|---|
 | Reads (BQ1) | `bq1_corridors_ranked` | `s3://is459-g2t1-aml-processed-bucket/bq1_corridors_ranked/` |
-| Reads (BQ2) | `bq2_lift`, `bq2_tradeoff`, `bq2_robustness`, `bq2_sankey` | *pending — Role 5/Role 6* |
-| Writes | *(none — dashboard only, no tables produced)* | |
+| Reads (BQ2) | `bq2_lift`, `bq2_tradeoff`, `bq2_robustness`, `bq2_sankey` | `s3://is459-g2t1-aml-processed-bucket/<table>/` |
+| Writes | none: dashboards only | |
 
 ### How to run
 
-1. Open `bq1_dashboard.twb` in Tableau Desktop. You'll need the Simba Athena JDBC driver installed locally and your own AWS Access Key ID/Secret Access Key for the `g2team1` account — see `connection.md`.
+1. Open `bq1_dashboard.twb` or `BQ2_Final_HI_LI_Analysis.twb` in Tableau Desktop. You'll need the Simba Athena JDBC driver installed locally and your own AWS Access Key ID/Secret Access Key for the `g2team1` account — see `connection.md`.
 2. The dashboard pulls live from Athena on open — no manual data load or refresh needed.
 
 ### Step Functions info for Sonia
 
 | Field | Value |
 |---|---|
-| Job type | N/A — manual visualization step, not part of the automated Step Function pipeline |
+| Job type | Not a pipeline step. The dashboards read the pipeline's tables live, so refresh them after a run |
 
 ### Contribution summary (for the Week 13 slide)
 
 Built BQ1's live-connected heatmap and top-20 ranked corridor table in Tableau; identified and resolved a data-quality outlier issue (billion/trillion-dollar phantom transactions) that was distorting the rankings.
 
-## Role 6 progress — Xiang Ying
+## Role 6 progress: Xiang Ying
+
+Final: `BQ2_Final_HI_LI_Analysis.twb` connects live to the four final Athena tables; details in [bq2/lift/README.md](../bq2/lift/README.md). The paragraph below records the earlier sample stage.
 
 Five sample worksheets have been built in Tableau: ranked sequences, targeted-vs-broad comparison, separate pair/triple Sankeys and the sample targeted checklist. [Nine screenshots and concise business descriptions](screenshots/README.md) record both sequence-length settings and the sample-only interpretation. The sample CSV exports were validated against the development Athena outputs; this sample workbook uses local CSV sources, not a claimed live final-data connection.
 
 Rankings/trade-offs use support 100, with distinct final transactions for targeting. Sankey weights reconcile to 134 positive pair occurrences and 38 positive triple occurrences. The checklist controls were tested by Xiang Ying. The combined sample pairs dashboard is captured with a top-5 checklist, sample disclaimer and metric-unit definitions. Some headings/legend labels remain truncated. The revised triples dashboard is also captured with the expected top-3 checklist and three-stage Sankey. Current native workbook inspection/delivery remains pending. Final HI/LI publication and LI robustness analysis are not established by these screenshots. See [Role 6 results](../bq2/lift/results.md) and the [build guide](bq2_tableau.md).
 
-## Role 3 progress — Ryan
+## Role 3 progress: Ryan
 
 BQ1 Athena pipeline complete: four chained tables (`bq1_direct_corridors`, `bq1_attempt_banks`, `bq1_shared_attempt_value`, `bq1_corridors_ranked`) producing Blindspot Gap and Extra Laundering Value per bank-pair corridor, with a $20M outlier filter applied after percentile analysis confirmed the dataset contains unrealistic billion/trillion-dollar transactions unrelated to actual laundering activity (confirmed with professor). Tableau connected live to Athena (not a CSV export); heatmap and top-20 ranked table built and filtered for readability. Priority sharing list complete: `bq1_priority_sharing_list` joins Role 4's (Le Xin) graph features (betweenness, community_id) onto the corridor ranking, with a cross_community_flag identifying corridors that bridge two separate bank communities — a stronger signal for information-sharing priority.

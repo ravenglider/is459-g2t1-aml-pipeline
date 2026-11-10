@@ -1,5 +1,7 @@
 # Role 5 sample-only preflight: configuration and startup diagnostics
 
+> **Not used in production (10 November 2026):** this Glue design was replaced by the Athena build in [`athena/`](athena/README.md), which builds `bq2_sequences` inside the Step Functions pipeline. Kept for reference.
+
 This is a validation/candidate-profile job, not ETL, sequence generation, staging
 or publication. No deployment, artifact upload, AWS job/resource creation or run
 is authorized by this document. Coordinate those actions separately with Sonia.

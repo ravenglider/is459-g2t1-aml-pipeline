@@ -15,8 +15,8 @@ The commands below are sectioned reproduction records, not instructions to
 rerun completed trials. All named run IDs/logs/baseline files already exist.
 Task12 sample SSM success/output acceptance,duplicate-ID rejection,isolated shell
 timeout and read-only output-validator rejection subsequently passed on7 November
-2026; see findings.md. Shared Step Functions integration remains Sonia-owned
-and pending. Current Active labels may select the last SSM sample; verify scope
+2026; see findings.md. Shared Step Functions integration is Sonia-owned and
+live: see the pipeline integration note in README.md. Current Active labels may select the last SSM sample; verify scope
 before manual analysis. No accepted
 manual graph restoration or additional runner execution is required to mark
 Task11 complete. EC2 uptime/cost and peak-memory reporting remain Task13 work.
@@ -179,7 +179,7 @@ On 3 November 2026 the team approved Neo4j Browser instead of Bloom for the fina
 
 Run in Session Manager/Bash on the existing host, one section at a time. These
 checks passed manually on 6 November 2026 after the role policies were updated;
-these preliminary checks alone do not establish completion. The subsequent direct trials passed; integrated execution remains pending.
+these preliminary checks alone do not establish completion. The subsequent direct trials passed; integrated execution later succeeded in the full pipeline (see README.md).
 
 ```bash
 aws athena get-work-group --work-group primary --region us-east-1 \
